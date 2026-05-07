@@ -1,4 +1,5 @@
 packages:
   - 'packages/*'
+  - '../tests/interop/contracts'
   - '../tests/interop/drivers/ts'
   - '../tests/interop/lib'

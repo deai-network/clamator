@@ -1,0 +1,9 @@
+{
+  "extends": "../../../ts/tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": ".",
+    "outDir": "dist",
+    "tsBuildInfoFile": ".tsbuildinfo"
+  },
+  "include": ["runner.ts", "docker.ts"]
+}

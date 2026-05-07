@@ -1,0 +1,10 @@
+{
+  "name": "@clamator/interop-contracts",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@clamator/protocol": "workspace:*",
+    "zod": "^3.23.0"
+  }
+}

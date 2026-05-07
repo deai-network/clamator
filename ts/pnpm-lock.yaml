@@ -21,6 +21,15 @@ importers:
         specifier: ^2.1.0
         version: 2.1.9(@types/node@20.19.39)
 
+  ../tests/interop/contracts:
+    dependencies:
+      '@clamator/protocol':
+        specifier: workspace:*
+        version: link:../../../ts/packages/protocol
+      zod:
+        specifier: ^3.23.0
+        version: 3.25.76
+
   ../tests/interop/drivers/ts:
     dependencies:
       '@clamator/over-redis':
@@ -36,6 +45,25 @@ importers:
         specifier: ^3.23.0
         version: 3.25.76
     devDependencies:
+      tsx:
+        specifier: ^4.19.0
+        version: 4.21.0
+      typescript:
+        specifier: ^5.6.0
+        version: 5.9.3
+
+  ../tests/interop/lib:
+    dependencies:
+      ioredis:
+        specifier: ^5.4.0
+        version: 5.10.1
+      yaml:
+        specifier: ^2.5.0
+        version: 2.8.4
+    devDependencies:
+      '@types/node':
+        specifier: ^20.0.0
+        version: 20.19.39
       tsx:
         specifier: ^4.19.0
         version: 4.21.0
@@ -817,6 +845,11 @@ packages:
     engines: {node: '>=8'}
     hasBin: true
 
+  yaml@2.8.4:
+    resolution: {integrity: sha512-ml/JPOj9fOQK8RNnWojA67GbZ0ApXAUlN2UQclwv2eVgTgn7O9gg9o7paZWKMp4g0H3nTLtS9LVzhkpOFIKzog==}
+    engines: {node: '>= 14.6'}
+    hasBin: true
+
   zod-to-json-schema@3.25.2:
     resolution: {integrity: sha512-O/PgfnpT1xKSDeQYSCfRI5Gy3hPf91mKVDuYLUHZJMiDFptvP41MSnWofm8dnCm0256ZNfZIM7DSzuSMAFnjHA==}
     peerDependencies:
@@ -1373,6 +1406,8 @@ snapshots:
     dependencies:
       siginfo: 2.0.0
       stackback: 0.0.2
+
+  yaml@2.8.4: {}
 
   zod-to-json-schema@3.25.2(zod@3.25.76):
     dependencies:
