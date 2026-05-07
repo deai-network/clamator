@@ -1,0 +1,34 @@
+# Node
+node_modules/
+*.log
+npm-debug.log*
+.pnpm-store/
+
+# TypeScript build output
+ts/packages/*/dist/
+ts/packages/*/.tsbuildinfo
+ts/packages/*/lib/
+
+# Python
+__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+.venv/
+.uv-cache/
+py/packages/*/dist/
+py/packages/*/build/
+py/packages/*/*.egg-info/
+
+# Codegen artifacts
+tests/interop/generated/
+tests/interop/.tmp/
+
+# Docker
+tests/interop/.redis-data/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+.DS_Store
