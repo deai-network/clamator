@@ -6,7 +6,7 @@ from redis.asyncio import Redis
 from clamator_over_redis import RedisRpcServer
 from clamator_protocol import RpcError
 
-import sys as _sys, importlib.util
+import importlib.util
 
 # Import the generated contract modules at runtime
 def _import(path: str, name: str):
