@@ -48,15 +48,14 @@ program
   .option('--ts-contract-import <path>', 'how generated TS imports the source contract')
   .option('--watch', 'rebuild on src changes')
   .action(async (opts: Record<string, string | boolean | undefined>) => {
-    await runCli({
-      src: opts.src as string,
-      outTs: opts['outTs'] as string | undefined,
-      outPy: opts['outPy'] as string | undefined,
-      manifest: opts.manifest as string | undefined,
-      jsonSchemaTarget: opts['jsonSchemaTarget'] as 'jsonSchema7' | 'openApi3' | undefined,
-      tsContractImport: opts['tsContractImport'] as string | undefined,
-      watch: opts.watch as boolean | undefined,
-    });
+    const cliOpts: CliOptions = { src: opts.src as string };
+    if (opts['outTs']) cliOpts.outTs = opts['outTs'] as string;
+    if (opts['outPy']) cliOpts.outPy = opts['outPy'] as string;
+    if (opts.manifest) cliOpts.manifest = opts.manifest as string;
+    if (opts['jsonSchemaTarget']) cliOpts.jsonSchemaTarget = opts['jsonSchemaTarget'] as 'jsonSchema7' | 'openApi3';
+    if (opts['tsContractImport']) cliOpts.tsContractImport = opts['tsContractImport'] as string;
+    if (opts.watch) cliOpts.watch = opts.watch as boolean;
+    await runCli(cliOpts);
   });
 
 const isMain = import.meta.url === `file://${process.argv[1]}`;

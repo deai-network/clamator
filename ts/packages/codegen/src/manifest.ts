@@ -12,9 +12,10 @@ export async function writeManifest(contracts: IrContract[], outPath: string): P
     contracts: {},
   };
   for (const c of contracts) {
-    manifest.contracts[c.service] = {};
+    const entry: Record<string, { paramsHash: string; resultHash: string | null }> = {};
+    manifest.contracts[c.service] = entry;
     for (const m of c.methods) {
-      manifest.contracts[c.service][m.name] = {
+      entry[m.name] = {
         paramsHash: m.params.hash,
         resultHash: m.result?.hash ?? null,
       };
