@@ -20,17 +20,9 @@ Future work and decisions outside the v0.1 scope. Consult before starting any ne
 - Doc generation from contracts.
 - Multi-region / federated redis.
 
-## Post-v0.1 review followups (2026-05-08)
+## Post-v0.1 review followups
 
-### Code-quality nits to fix in v0.1.1+
-
-- **AGENTS.md says "XCLAIM" in TS over-redis but command used is `XAUTOCLAIM`.** Fix: `ts/packages/over-redis/AGENTS.md` lines mentioning XCLAIM, and `ts/packages/over-redis/tests/crash-recovery.test.ts:16` test description. Py AGENTS.md is correct.
-- **Py `parse_envelope` accepts `bool` as `RpcId`.** `bool` is a subclass of `int` in Python, so `id=True` slips through `isinstance(rpc_id, (str, int))`. TS rejects it. Either narrow Py or relax TS. Path: `py/packages/protocol/src/clamator_protocol/envelope.py`.
-- **Stray `class GeneratedModels(BaseModel): pass` in every codegenned `.py` file.** Comes from `datamodel-codegen` honoring the wrapper schema's `title`. Fix: omit `title` in `emit-py.ts` wrapper schema, or post-process to strip the empty class.
-- **Worker-pool fairness scenario is a mathematical identity, not a real test.** Fix: drivers emit `HANDLED:<count>` per server to stderr; runner parses and asserts both servers handled ≥ N/10. Path: `tests/interop/lib/runner.ts:468–480` and the driver `server.ts`/`server.py`.
-- **"100 concurrent calls" scenario runs sequentially.** Drivers don't actually parallelize; the runner repeats the call list and the driver loops. Fix: driver fans out via `Promise.all` / `asyncio.gather` when `concurrent` is set. Or rename to "100 sequential calls".
-- **Dead `import sys as _sys, importlib.util` in interop Py server driver.** Path: `tests/interop/drivers/py/server.py:9`. Just remove `_sys` from the import.
-- **Py `over-redis __init__.py` doesn't export key-naming helpers** (`command_stream`, `reply_stream`, `consumer_group_name`, `consumer_name`). TS exports all four via `export * from './keys.js'`. The Py AGENTS.md lists them. Fix: add them to `__all__`.
+All seven 2026-05-08 code-quality nits were resolved before tagging v0.1.0; see commits `83877a3`, `739b986`, `0482970`, `93cc379`, `240afe9`, `111bcb2`, `827c738`.
 
 ### Bigger followups (defer to v0.2 or later)
 
