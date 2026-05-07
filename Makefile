@@ -9,7 +9,11 @@ install:    ## install deps in both langs
 
 build:      ## build all packages
 	cd ts && pnpm -r build
-	cd py && uv build --all
+	@if [ -d py/packages ] && [ -n "$$(ls -A py/packages 2>/dev/null)" ]; then \
+	  cd py && uv build --all; \
+	else \
+	  echo "(no py packages yet — skipping uv build --all)"; \
+	fi
 
 lint:       ## lint both langs
 	cd ts && pnpm -r lint
