@@ -96,7 +96,7 @@ class ClientRedisTransport:
             pass
 
     async def _reply_loop(self) -> None:
-        last_id = "$"
+        last_id = "0"
         while True:
             try:
                 results = await self._redis.xread({self._reply_stream: last_id}, block=1000)
