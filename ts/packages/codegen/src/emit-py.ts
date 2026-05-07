@@ -37,7 +37,6 @@ export async function emitPy(contracts: IrContract[], opts: EmitPyOptions): Prom
     }
     const wrapper = {
       $schema: 'http://json-schema.org/draft-07/schema#',
-      title: 'GeneratedModels',
       type: 'object',
       $defs: defs,
     };
@@ -86,6 +85,7 @@ function runDatamodelCodegen(bin: string, schemaPath: string, outPath: string): 
       '--snake-case-field',
       '--enum-field-as-literal', 'all',
       '--reuse-model',
+      '--skip-root-model',
     ];
     const child = spawn(bin, args, { stdio: ['ignore', 'pipe', 'pipe'] });
     let stderr = '';

@@ -7,10 +7,6 @@ from clamator_protocol import ClamatorClient, Contract, MethodEntry
 from pydantic import BaseModel, ConfigDict
 
 
-class GeneratedModels(BaseModel):
-    pass
-
-
 class AddParams(BaseModel):
     model_config = ConfigDict(
         extra="forbid",
