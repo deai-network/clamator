@@ -8,15 +8,15 @@ install:    ## install deps in both langs
 	cd py && uv sync
 
 build:      ## build all packages
-	cd ts && pnpm -r build || true
-	cd py && uv build --all 2>/dev/null || true
+	cd ts && pnpm -r build
+	cd py && uv build --all
 
 lint:       ## lint both langs
 	cd ts && pnpm -r lint
 	cd py && uv run ruff check .
 
 test:       ## per-lang unit tests (no interop)
-	cd ts && pnpm -r test || true
+	cd ts && pnpm -r test
 	cd py && EXIT=0; uv run pytest || EXIT=$$?; \
 	  if [ "$$EXIT" -eq 5 ]; then echo "(no python tests)"; exit 0; else exit $$EXIT; fi
 
