@@ -21,6 +21,28 @@ importers:
         specifier: ^2.1.0
         version: 2.1.9(@types/node@20.19.39)
 
+  ../tests/interop/drivers/ts:
+    dependencies:
+      '@clamator/over-redis':
+        specifier: workspace:*
+        version: link:../../../../ts/packages/over-redis
+      '@clamator/protocol':
+        specifier: workspace:*
+        version: link:../../../../ts/packages/protocol
+      ioredis:
+        specifier: ^5.4.0
+        version: 5.10.1
+      zod:
+        specifier: ^3.23.0
+        version: 3.25.76
+    devDependencies:
+      tsx:
+        specifier: ^4.19.0
+        version: 4.21.0
+      typescript:
+        specifier: ^5.6.0
+        version: 5.9.3
+
   packages/codegen:
     dependencies:
       '@clamator/protocol':

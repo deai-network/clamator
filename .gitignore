@@ -8,6 +8,8 @@ npm-debug.log*
 ts/packages/*/dist/
 ts/packages/*/.tsbuildinfo
 ts/packages/*/lib/
+tests/interop/drivers/ts/dist/
+tests/interop/drivers/ts/.tsbuildinfo
 
 # Python
 __pycache__/

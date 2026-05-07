@@ -1,0 +1,15 @@
+{
+  "extends": "../../../../ts/tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": "../..",
+    "outDir": "dist",
+    "tsBuildInfoFile": ".tsbuildinfo",
+    "baseUrl": ".",
+    "paths": {
+      "@clamator/protocol": ["./node_modules/@clamator/protocol/dist/index.d.ts"],
+      "@clamator/over-redis": ["./node_modules/@clamator/over-redis/dist/index.d.ts"],
+      "zod": ["./node_modules/zod/index.d.ts"]
+    }
+  },
+  "include": ["server.ts", "client.ts", "../../contracts/**/*"]
+}
