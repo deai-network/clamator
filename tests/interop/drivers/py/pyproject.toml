@@ -1,0 +1,11 @@
+[project]
+name = "clamator-interop-driver-py"
+version = "0.0.0"
+description = "Cross-language interop driver (private)."
+requires-python = ">=3.11"
+dependencies = [
+  "clamator-protocol",
+  "clamator-over-redis",
+  "redis>=5.0",
+  "pydantic>=2.5",
+]

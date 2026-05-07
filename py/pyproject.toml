@@ -1,5 +1,5 @@
 [tool.uv.workspace]
-members = ["packages/*"]
+members = ["packages/*", "../tests/interop/drivers/py"]
 
 [tool.uv]
 dev-dependencies = [
