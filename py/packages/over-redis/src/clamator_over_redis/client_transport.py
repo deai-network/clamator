@@ -17,14 +17,12 @@ class ClientRedisTransport:
     def __init__(
         self, *, redis: Redis, key_prefix: str,
         instance_id: str | None = None,
-        reply_stream_maxlen: int = 1024,
         default_timeout_ms: int = 30_000,
     ) -> None:
         self._redis = redis
         self._key_prefix = key_prefix
         self.instance_id = instance_id or str(uuid.uuid4())
         self._reply_stream = reply_stream(key_prefix, self.instance_id)
-        self._reply_maxlen = reply_stream_maxlen
         self._default_timeout = default_timeout_ms / 1000
         self._state = "idle"
         self._pending: dict[str, asyncio.Future[dict[str, Any]]] = {}

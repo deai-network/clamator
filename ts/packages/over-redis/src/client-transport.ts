@@ -10,7 +10,6 @@ export interface ClientTransportOptions {
   redis: Redis;
   keyPrefix: string;
   instanceId?: string;
-  replyStreamMaxLen?: number;
   defaultTimeoutMs?: number;
 }
 
