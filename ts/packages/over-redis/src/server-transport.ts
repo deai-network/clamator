@@ -1,0 +1,146 @@
+import { randomUUID } from 'node:crypto';
+import type { Redis } from 'ioredis';
+import {
+  parseEnvelope, EnvelopeKind, ClamatorTransportError,
+  type Transport, type Dispatcher, type SendOptions,
+} from '@clamator/protocol';
+import { commandStream, consumerGroupName, consumerName } from './keys.js';
+
+export interface ServerTransportOptions {
+  redis: Redis;
+  keyPrefix: string;
+  instanceId?: string;
+  consumerClaimIdleMs?: number;
+  defaultHandlerTimeoutMs?: number;
+  shutdownGraceMs?: number;
+}
+
+export class ServerRedisTransport implements Transport {
+  readonly instanceId: string;
+  private dispatchers = new Map<string, Dispatcher>();
+  private state: 'idle' | 'started' | 'stopped' = 'idle';
+  private loops: Promise<void>[] = [];
+  private abort = false;
+
+  constructor(private readonly opts: ServerTransportOptions) {
+    this.instanceId = opts.instanceId ?? randomUUID();
+  }
+
+  async registerService(name: string, dispatch: Dispatcher): Promise<void> {
+    this.dispatchers.set(name, dispatch);
+  }
+
+  async send(): Promise<Record<string, unknown>> {
+    throw new Error('server transport cannot send requests');
+  }
+
+  async notify(): Promise<void> {
+    throw new Error('server transport cannot send notifications');
+  }
+
+  async start(): Promise<void> {
+    if (this.state === 'stopped') throw new ClamatorTransportError('transport has been stopped');
+    if (this.state === 'started') return;
+    this.state = 'started';
+    this.abort = false;
+    for (const service of this.dispatchers.keys()) {
+      const stream = commandStream(this.opts.keyPrefix, service);
+      const group = consumerGroupName(service);
+      try {
+        await this.opts.redis.xgroup('CREATE', stream, group, '$', 'MKSTREAM');
+      } catch (e) {
+        const msg = (e as Error).message;
+        if (!msg.includes('BUSYGROUP')) throw e;
+      }
+      this.loops.push(this.runConsumerLoop(service));
+      this.loops.push(this.runReclaimLoop(service));
+    }
+  }
+
+  async stop(): Promise<void> {
+    if (this.state !== 'started') { this.state = 'stopped'; return; }
+    this.abort = true;
+    const grace = this.opts.shutdownGraceMs ?? 5000;
+    await Promise.race([
+      Promise.allSettled(this.loops),
+      new Promise(r => setTimeout(r, grace)),
+    ]);
+    this.state = 'stopped';
+  }
+
+  private async runConsumerLoop(service: string): Promise<void> {
+    const stream = commandStream(this.opts.keyPrefix, service);
+    const group = consumerGroupName(service);
+    const consumer = consumerName(service, this.instanceId);
+    while (!this.abort) {
+      try {
+        const result = await this.opts.redis.xreadgroup(
+          'GROUP', group, consumer, 'COUNT', 16, 'BLOCK', 1000,
+          'STREAMS', stream, '>',
+        );
+        if (!result) continue;
+        for (const [, entries] of result as [string, [string, string[]][]][]) {
+          for (const [entryId, fields] of entries) {
+            await this.handleEntry(service, stream, group, entryId, fields);
+          }
+        }
+      } catch (err) {
+        if (this.abort) return;
+        await new Promise(r => setTimeout(r, 100));
+      }
+    }
+  }
+
+  private async runReclaimLoop(service: string): Promise<void> {
+    const stream = commandStream(this.opts.keyPrefix, service);
+    const group = consumerGroupName(service);
+    const consumer = consumerName(service, this.instanceId);
+    const idleThreshold = this.opts.consumerClaimIdleMs ?? 60_000;
+    while (!this.abort) {
+      try {
+        await new Promise(r => setTimeout(r, Math.max(1000, idleThreshold / 4)));
+        if (this.abort) return;
+        const claimed = await this.opts.redis.xautoclaim(
+          stream, group, consumer, idleThreshold, '0', 'COUNT', 32,
+        ) as [string, [string, string[]][], string[]];
+        const entries = claimed[1];
+        if (!entries || entries.length === 0) continue;
+        for (const [entryId, fields] of entries) {
+          await this.handleEntry(service, stream, group, entryId, fields);
+        }
+      } catch (err) {
+        if (this.abort) return;
+      }
+    }
+  }
+
+  private async handleEntry(
+    service: string, stream: string, group: string,
+    entryId: string, fields: string[],
+  ): Promise<void> {
+    const envIdx = fields.indexOf('envelope');
+    if (envIdx < 0) {
+      await this.opts.redis.xack(stream, group, entryId);
+      return;
+    }
+    const replyToIdx = fields.indexOf('reply-to');
+    const replyTo = replyToIdx >= 0 ? fields[replyToIdx + 1] : null;
+    let envObj: Record<string, unknown>;
+    try { envObj = JSON.parse(fields[envIdx + 1] ?? '') as Record<string, unknown>; }
+    catch { await this.opts.redis.xack(stream, group, entryId); return; }
+    let parsed;
+    try { parsed = parseEnvelope(envObj); } catch { await this.opts.redis.xack(stream, group, entryId); return; }
+
+    const dispatcher = this.dispatchers.get(service);
+    if (!dispatcher) { await this.opts.redis.xack(stream, group, entryId); return; }
+
+    const reply = await dispatcher(parsed);
+    if (replyTo && reply) {
+      await this.opts.redis.xadd(
+        replyTo, 'MAXLEN', '~', String(this.opts.defaultHandlerTimeoutMs ?? 1024), '*',
+        'type', 'rpc', 'envelope', JSON.stringify(reply),
+      );
+    }
+    await this.opts.redis.xack(stream, group, entryId);
+  }
+}
