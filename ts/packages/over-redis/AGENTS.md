@@ -17,10 +17,9 @@ Sibling package: `clamator-over-redis` (Py). Changes here usually require siblin
 |---|---|---|
 | `keyPrefix` | required | namespace for all streams + keys |
 | `instanceId` | UUID | identifies this client/server instance |
-| `replyStreamMaxLen` | 1024 | bound for client reply stream |
+| `replyStreamMaxLen` | 1024 | XADD MAXLEN bound for reply streams (client and server) |
 | `consumerClaimIdleMs` | 60_000 | XCLAIM idle threshold (server) |
 | `defaultTimeoutMs` | 30_000 | per-call timeout (client) |
-| `defaultHandlerTimeoutMs` | 30_000 | per-handler timeout (server) |
 | `shutdownGraceMs` | 5_000 | drain window on `stop()` |
 
 ## Stream / key naming (must not change without bumping version)

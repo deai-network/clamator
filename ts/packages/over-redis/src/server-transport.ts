@@ -11,7 +11,7 @@ export interface ServerTransportOptions {
   keyPrefix: string;
   instanceId?: string;
   consumerClaimIdleMs?: number;
-  defaultHandlerTimeoutMs?: number;
+  replyStreamMaxLen?: number;
   shutdownGraceMs?: number;
 }
 
@@ -27,8 +27,11 @@ export class ServerRedisTransport implements Transport {
   // queued behind the blocking read.
   private blockingConns: Redis[] = [];
 
+  private readonly replyStreamMaxLen: number;
+
   constructor(private readonly opts: ServerTransportOptions) {
     this.instanceId = opts.instanceId ?? randomUUID();
+    this.replyStreamMaxLen = opts.replyStreamMaxLen ?? 1024;
   }
 
   async registerService(name: string, dispatch: Dispatcher): Promise<void> {
@@ -166,7 +169,7 @@ export class ServerRedisTransport implements Transport {
     const reply = await dispatcher(parsed);
     if (replyTo && reply) {
       await this.opts.redis.xadd(
-        replyTo, 'MAXLEN', '~', String(this.opts.defaultHandlerTimeoutMs ?? 1024), '*',
+        replyTo, 'MAXLEN', '~', String(this.replyStreamMaxLen), '*',
         'type', 'rpc', 'envelope', JSON.stringify(reply),
       );
     }

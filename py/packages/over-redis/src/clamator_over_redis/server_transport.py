@@ -17,14 +17,14 @@ class ServerRedisTransport:
         self, *, redis: Redis, key_prefix: str,
         instance_id: str | None = None,
         consumer_claim_idle_ms: int = 60_000,
-        default_handler_timeout_ms: int = 30_000,
+        reply_stream_maxlen: int = 1024,
         shutdown_grace_ms: int = 5_000,
     ) -> None:
         self._redis = redis
         self._key_prefix = key_prefix
         self.instance_id = instance_id or str(uuid.uuid4())
         self._claim_idle_ms = consumer_claim_idle_ms
-        self._handler_timeout_ms = default_handler_timeout_ms
+        self._reply_stream_maxlen = reply_stream_maxlen
         self._shutdown_grace_ms = shutdown_grace_ms
         self._dispatchers: dict[str, Dispatcher] = {}
         self._state = "idle"
@@ -136,6 +136,6 @@ class ServerRedisTransport:
         if reply_to and reply is not None:
             await self._redis.xadd(
                 reply_to, {"type": "rpc", "envelope": json.dumps(reply)},
-                maxlen=1024, approximate=True,
+                maxlen=self._reply_stream_maxlen, approximate=True,
             )
         await self._redis.xack(stream, group, entry_id)

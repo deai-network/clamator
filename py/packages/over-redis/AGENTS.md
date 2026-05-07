@@ -16,10 +16,9 @@ Changes here usually require sibling change in same commit.
 |---|---|---|---|
 | `key_prefix` | `keyPrefix` | required | namespace for all streams + keys |
 | `instance_id` | `instanceId` | UUID | identifies this client/server instance |
-| `reply_stream_maxlen` | `replyStreamMaxLen` | 1024 | bound for client reply stream |
+| `reply_stream_maxlen` | `replyStreamMaxLen` | 1024 | XADD MAXLEN bound for reply streams (client and server) |
 | `consumer_claim_idle_ms` | `consumerClaimIdleMs` | 60_000 | XAUTOCLAIM idle threshold (server) |
 | `default_timeout_ms` | `defaultTimeoutMs` | 30_000 | per-call timeout (client) |
-| `default_handler_timeout_ms` | `defaultHandlerTimeoutMs` | 30_000 | per-handler timeout (server) |
 | `shutdown_grace_ms` | `shutdownGraceMs` | 5_000 | drain window on `stop()` |
 
 ## Stream / key naming (must not change without bumping version)

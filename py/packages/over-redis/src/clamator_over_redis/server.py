@@ -9,12 +9,12 @@ class RedisRpcServer(RpcServerCore):
         self, *, redis: Redis, key_prefix: str,
         instance_id: str | None = None,
         consumer_claim_idle_ms: int = 60_000,
-        default_handler_timeout_ms: int = 30_000,
+        reply_stream_maxlen: int = 1024,
         shutdown_grace_ms: int = 5_000,
     ) -> None:
         super().__init__(ServerRedisTransport(
             redis=redis, key_prefix=key_prefix, instance_id=instance_id,
             consumer_claim_idle_ms=consumer_claim_idle_ms,
-            default_handler_timeout_ms=default_handler_timeout_ms,
+            reply_stream_maxlen=reply_stream_maxlen,
             shutdown_grace_ms=shutdown_grace_ms,
         ))
