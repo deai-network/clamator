@@ -17,6 +17,10 @@ interface CliOptions {
 }
 
 export async function runCli(opts: CliOptions): Promise<void> {
+  if (opts.watch) {
+    console.warn('--watch is not implemented in v0.1; performing a single run and exiting');
+    return;
+  }
   const loaded = await loadContracts(opts.src);
   if (loaded.length === 0) {
     console.warn(`[clamator-codegen] no contracts found in ${opts.src}`);
