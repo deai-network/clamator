@@ -53,6 +53,11 @@ def test_rejects_invalid_method_segment():
         parse_envelope({"jsonrpc": "2.0", "method": "engine.Launch", "params": {}})
 
 
+def test_rejects_bool_as_id():
+    with pytest.raises(ValueError, match="-32600"):
+        parse_envelope({"jsonrpc": "2.0", "method": "a.b", "params": {}, "id": True})
+
+
 def test_regexes():
     assert SERVICE_RE.match("engine")
     assert SERVICE_RE.match("order-service")

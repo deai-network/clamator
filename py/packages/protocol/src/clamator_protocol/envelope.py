@@ -88,7 +88,7 @@ def parse_envelope(value: Any) -> Envelope:
             raise _invalid("invalid method segment")
         if has_id:
             rpc_id = value["id"]
-            if not isinstance(rpc_id, (str, int)):
+            if isinstance(rpc_id, bool) or not isinstance(rpc_id, (str, int)):
                 raise _invalid("id must be string or number")
             return RequestEnvelope(
                 service=service, method=method, full_method=full_method,
