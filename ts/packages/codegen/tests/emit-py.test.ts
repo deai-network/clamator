@@ -1,0 +1,37 @@
+import { describe, it, expect } from 'vitest';
+import fs from 'node:fs/promises';
+import path from 'node:path';
+import os from 'node:os';
+import { spawnSync } from 'node:child_process';
+import { loadContracts } from '../src/load.js';
+import { lowerContracts } from '../src/lower.js';
+import { emitPy } from '../src/emit-py.js';
+
+function hasDatamodelCodegen(): boolean {
+  const r = spawnSync('datamodel-codegen', ['--version'], { stdio: 'pipe' });
+  return r.status === 0;
+}
+
+describe.skipIf(!hasDatamodelCodegen())('emitPy', () => {
+  it('emits a Python file per service with header + tail', async () => {
+    const srcDir = path.resolve(__dirname, 'fixtures/contracts');
+    const outDir = await fs.mkdtemp(path.join(os.tmpdir(), 'clamator-emit-py-'));
+    const ir = lowerContracts(await loadContracts(srcDir), { jsonSchemaTarget: 'jsonSchema7' });
+    const { filesWritten } = await emitPy(ir, { outDir });
+    expect(filesWritten.map(p => path.basename(p)).sort()).toEqual(['arith.py', 'notifications.py']);
+    const arith = await fs.readFile(path.join(outDir, 'arith.py'), 'utf-8');
+    const expected = await fs.readFile(path.resolve(__dirname, 'fixtures/expected/py/arith.py'), 'utf-8');
+    expect(arith).toBe(expected);
+  });
+
+  it('is idempotent', async () => {
+    const srcDir = path.resolve(__dirname, 'fixtures/contracts');
+    const outDir = await fs.mkdtemp(path.join(os.tmpdir(), 'clamator-emit-py-'));
+    const ir = lowerContracts(await loadContracts(srcDir), { jsonSchemaTarget: 'jsonSchema7' });
+    await emitPy(ir, { outDir });
+    const a = await fs.readFile(path.join(outDir, 'arith.py'), 'utf-8');
+    await emitPy(ir, { outDir });
+    const b = await fs.readFile(path.join(outDir, 'arith.py'), 'utf-8');
+    expect(a).toBe(b);
+  });
+});
