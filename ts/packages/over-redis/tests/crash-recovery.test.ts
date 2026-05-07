@@ -13,7 +13,7 @@ const c = defineContract('arith', {
 });
 
 describe.skipIf(!REDIS_URL)('redis crash recovery', () => {
-  it('XCLAIM-based reclaim picks up an abandoned message', async () => {
+  it('XAUTOCLAIM-based reclaim picks up an abandoned message', async () => {
     const prefix = `clam-test-${Math.random().toString(36).slice(2, 8)}`;
     const r1 = new IORedis(REDIS_URL!), r2 = new IORedis(REDIS_URL!), rc = new IORedis(REDIS_URL!);
     // Server 1 starts a handler that hangs forever, ack-less. Then we kill it.

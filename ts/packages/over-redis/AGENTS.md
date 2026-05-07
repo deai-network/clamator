@@ -32,7 +32,7 @@ Sibling package: `clamator-over-redis` (Py). Changes here usually require siblin
 
 ## Crash recovery + idempotency
 
-- `XCLAIM` reclaims messages whose consumer has been idle > `consumerClaimIdleMs`.
+- `XAUTOCLAIM` reclaims messages whose consumer has been idle > `consumerClaimIdleMs`.
 - Combined with the protocol-level idempotency contract, retried messages are safe.
 - Document idempotency in handler-author guidance, not enforced by the adapter.
 
