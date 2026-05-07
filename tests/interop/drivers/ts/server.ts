@@ -27,29 +27,43 @@ async function main() {
     ...(cfg.instanceId !== undefined ? { instanceId: cfg.instanceId } : {}),
     ...(cfg.consumerClaimIdleMs !== undefined ? { consumerClaimIdleMs: cfg.consumerClaimIdleMs } : {}),
   });
+
+  let handledCount = 0;
+
   if (cfg.contract === 'arith') {
     server.registerService(arithContract, {
-      add: async ({ a, b }) => ({ sum: a + b }),
+      add: async ({ a, b }) => { handledCount++; return { sum: a + b }; },
       slowAdd: async ({ a, b, sleepMs }) => {
+        handledCount++;
         await new Promise(res => setTimeout(res, sleepMs));
         return { sum: a + b };
       },
       divide: async ({ a, b }) => {
+        handledCount++;
         if (b === 0) throw new RpcError(-32000, 'division by zero');
         return { q: a / b };
       },
-      echoText: async ({ text }) => ({ text }),
+      echoText: async ({ text }) => { handledCount++; return { text }; },
     });
   } else {
     let pingedAt: number | null = null;
     server.registerService(notificationsContract, {
-      ping: async () => { pingedAt = Date.now(); },
+      ping: async () => { handledCount++; pingedAt = Date.now(); },
     });
     process.on('SIGTERM', () => {
       console.log(JSON.stringify({ pingedAt }));
+      process.stderr.write(`HANDLED:${handledCount}\n`);
       process.exit(0);
     });
   }
+
+  if (cfg.contract === 'arith') {
+    process.on('SIGTERM', () => {
+      process.stderr.write(`HANDLED:${handledCount}\n`);
+      process.exit(0);
+    });
+  }
+
   await server.start();
   console.log('READY');
   await new Promise(() => {});

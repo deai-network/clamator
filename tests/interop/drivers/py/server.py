@@ -1,5 +1,6 @@
 import asyncio
 import json
+import signal
 import sys
 from typing import Any
 from redis.asyncio import Redis
@@ -30,25 +31,49 @@ async def main() -> None:
         instance_id=cfg.get("instanceId"),
         consumer_claim_idle_ms=cfg.get("consumerClaimIdleMs", 60_000),
     )
+
+    handled_count = 0
+    stop_event = asyncio.Event()
+
+    def _shutdown(signum: int, frame: object) -> None:
+        print(f"HANDLED:{handled_count}", file=sys.stderr, flush=True)
+        stop_event.set()
+
+    signal.signal(signal.SIGTERM, _shutdown)
+    signal.signal(signal.SIGINT, _shutdown)
+
     if contract == "arith":
         class Arith(arith_mod.ArithService):
-            async def add(self, params): return arith_mod.AddResult(sum=params.a + params.b)
+            async def add(self, params):
+                nonlocal handled_count
+                handled_count += 1
+                return arith_mod.AddResult(sum=params.a + params.b)
             async def slow_add(self, params):
+                nonlocal handled_count
+                handled_count += 1
                 await asyncio.sleep(params.sleep_ms / 1000.0)
                 return arith_mod.SlowAddResult(sum=params.a + params.b)
             async def divide(self, params):
+                nonlocal handled_count
+                handled_count += 1
                 if params.b == 0: raise RpcError(-32000, "division by zero")
                 return arith_mod.DivideResult(q=params.a / params.b)
-            async def echo_text(self, params): return arith_mod.EchoTextResult(text=params.text)
+            async def echo_text(self, params):
+                nonlocal handled_count
+                handled_count += 1
+                return arith_mod.EchoTextResult(text=params.text)
         server.register_service(arith_mod.arith_contract, Arith())
     else:
         class Notif(notif_mod.NotificationsService):
-            async def ping(self, params): pass
+            async def ping(self, params):
+                nonlocal handled_count
+                handled_count += 1
         server.register_service(notif_mod.notifications_contract, Notif())
+
     await server.start()
     print("READY", flush=True)
     try:
-        await asyncio.Event().wait()
+        await stop_event.wait()
     finally:
         await server.stop()
         await redis.close()

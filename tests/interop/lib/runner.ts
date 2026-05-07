@@ -101,6 +101,11 @@ function extendedEnv(): NodeJS.ProcessEnv {
   };
 }
 
+// Path to the tsx binary bundled inside the monorepo's node_modules.
+// Spawning tsx directly (not via pnpm exec) ensures SIGTERM is delivered to
+// the tsx process itself, not absorbed by the pnpm wrapper.
+const TSX_BIN = path.join(ROOT, 'ts/node_modules/.bin/tsx');
+
 function spawnServer(
   lang: 'ts' | 'py',
   cfg: Record<string, unknown>,
@@ -108,11 +113,9 @@ function spawnServer(
   const env = extendedEnv();
   let proc: ChildProcessWithoutNullStreams;
   if (lang === 'ts') {
-    // Run tsx via the interop-driver-ts package's local tsx binary
     proc = spawn(
-      'pnpm',
-      ['--filter', '@clamator/interop-driver-ts', 'exec', 'tsx',
-       path.join(ROOT, 'tests/interop/drivers/ts/server.ts')],
+      TSX_BIN,
+      [path.join(ROOT, 'tests/interop/drivers/ts/server.ts')],
       { cwd: path.join(ROOT, 'ts'), env, stdio: ['pipe', 'pipe', 'pipe'] },
     );
   } else {
@@ -136,9 +139,8 @@ function spawnClient(
   let proc: ChildProcessWithoutNullStreams;
   if (lang === 'ts') {
     proc = spawn(
-      'pnpm',
-      ['--filter', '@clamator/interop-driver-ts', 'exec', 'tsx',
-       path.join(ROOT, 'tests/interop/drivers/ts/client.ts')],
+      TSX_BIN,
+      [path.join(ROOT, 'tests/interop/drivers/ts/client.ts')],
       { cwd: path.join(ROOT, 'ts'), env, stdio: ['pipe', 'pipe', 'pipe'] },
     );
   } else {
@@ -152,6 +154,29 @@ function spawnClient(
   proc.stdin.write(JSON.stringify(cfg));
   proc.stdin.end();
   return proc;
+}
+
+// Per-server stderr buffer, keyed by process object.
+const serverStderrBuffers = new WeakMap<ChildProcessWithoutNullStreams, string[]>();
+
+function attachServerStderr(proc: ChildProcessWithoutNullStreams, label: string): void {
+  const buf: string[] = [];
+  serverStderrBuffers.set(proc, buf);
+  proc.stderr.on('data', (d: Buffer) => {
+    const s = d.toString();
+    buf.push(s);
+    process.stderr.write(`[${label}/stderr] ${s}`);
+  });
+}
+
+function parseHandledCount(proc: ChildProcessWithoutNullStreams): number | null {
+  const buf = serverStderrBuffers.get(proc);
+  if (!buf) return null;
+  const full = buf.join('');
+  const matches = [...full.matchAll(/^HANDLED:(\d+)$/gm)];
+  if (matches.length === 0) return null;
+  // Use the last occurrence
+  return parseInt(matches[matches.length - 1][1]!, 10);
 }
 
 async function waitForReady(
@@ -187,11 +212,6 @@ async function waitForReady(
 
     proc.stdout.on('data', onData);
     proc.once('exit', onExit);
-
-    // Forward stderr for debugging
-    proc.stderr.on('data', (d: Buffer) => {
-      process.stderr.write(`[${label}/stderr] ${d.toString()}`);
-    });
   });
 }
 
@@ -430,11 +450,13 @@ async function runDirectionalScenario(
 
     // Spawn server A
     serverA = spawnServer(serverLang, { ...serverCfgBase, instanceId: 'srv-A' });
+    attachServerStderr(serverA, `${s.name}/${dirLabel}/srv-A`);
     await waitForReady(serverA, `${s.name}/${dirLabel}/srv-A`);
 
     // Spawn server B if needed
     if ((s.servers ?? 1) >= 2) {
       serverB = spawnServer(serverLang, { ...serverCfgBase, instanceId: 'srv-B' });
+      attachServerStderr(serverB, `${s.name}/${dirLabel}/srv-B`);
       await waitForReady(serverB, `${s.name}/${dirLabel}/srv-B`);
     }
 
@@ -464,20 +486,33 @@ async function runDirectionalScenario(
 
     if (crashTimer !== null) clearTimeout(crashTimer);
 
-    // Collect server-side handled counts if servers: 2
+    // Save references before we kill+null the server vars, so we can parse HANDLED counts
+    const serverARef = serverA;
+    const serverBRef = serverB;
+
+    // Kill servers and wait for them to exit so HANDLED lines are flushed to stderr
+    if (serverA) { killProc(serverA, 'SIGTERM'); await waitForExit(serverA); serverA = null; }
+    if (serverB) { killProc(serverB, 'SIGTERM'); await waitForExit(serverB); serverB = null; }
+
+    // Collect server-side handled counts when a distributionRoughlyEven check is present.
+    // Other multi-server scenarios (e.g. crash recovery) don't need this.
+    const needsDistributionCheck = s.calls.some(c => c.expect?.distributionRoughlyEven);
     let serverACalls = 0;
     let serverBCalls = 0;
-    if ((s.servers ?? 1) >= 2) {
-      // Servers report handled counts to stderr tagged with "HANDLED:<n>"
-      // For distribution fairness: infer from results — if distribution check
-      // is needed we check server stdout lines. For now, we use the results length
-      // as a proxy: the total n = repeat * concurrent, split N/2 ≈ each.
-      // Actual driver tracking: each server logs HANDLED lines; we'll parse them.
-      // Since the current drivers don't emit HANDLED lines, we use approximate:
-      // if both are alive, assume even split by symmetry; just validate total count.
-      const totalCalls = expandedCalls.length;
-      serverACalls = Math.floor(totalCalls / 2);
-      serverBCalls = totalCalls - serverACalls;
+    if (needsDistributionCheck && (s.servers ?? 1) >= 2) {
+      const aCount = serverARef ? parseHandledCount(serverARef) : null;
+      const bCount = serverBRef ? parseHandledCount(serverBRef) : null;
+      if (aCount === null) {
+        return { name: s.name, direction: dirLabel, passed: false,
+          reason: 'srv-A did not emit HANDLED:<n> line on shutdown' };
+      }
+      if (bCount === null) {
+        return { name: s.name, direction: dirLabel, passed: false,
+          reason: 'srv-B did not emit HANDLED:<n> line on shutdown' };
+      }
+      serverACalls = aCount;
+      serverBCalls = bCount;
+      console.log(`  [worker-pool] srv-A: ${serverACalls}, srv-B: ${serverBCalls}`);
     }
 
     const failure = checkExpectations(s, clientOutput.results, serverACalls, serverBCalls);
