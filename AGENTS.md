@@ -97,6 +97,14 @@ If a unit test seems to require a subprocess, reconsider — usually the right f
 
 Publishing is local (`scripts/release.sh` → `npm publish` + `twine upload`). The `.github/workflows/release.yml` GitHub Action does **verification only** — never add publish steps to any workflow file. Tag-triggered verification produces a green badge for the release; the user runs `release.sh` from their machine to actually upload.
 
+### Required status checks on `main`
+
+- `TS / build-test-lint`
+- `Py / build-test-lint`
+- `Interop / cross-language`
+
+These three must pass on every PR before merge. The release-verification workflow is gated on tags only.
+
 ## 8. Git commits
 
 Do not add `Co-Authored-By` trailers, "🤖 Generated with…" footers, or any other AI-attribution lines to commit messages. Commit messages contain only the actual change description.
