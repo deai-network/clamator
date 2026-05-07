@@ -1,0 +1,60 @@
+name: Release verification
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    services:
+      redis:
+        image: redis:7-alpine
+        ports: ['6379:6379']
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 1s --health-timeout 1s --health-retries 30
+    env:
+      REDIS_URL: redis://localhost:6379
+      INTEROP_USE_EXTERNAL_REDIS: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '20' }
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.11' }
+      - uses: pnpm/action-setup@v4
+        with: { version: 9.12.0 }
+      - name: Install uv
+        run: pipx install uv
+      - name: Install datamodel-code-generator
+        run: pipx install datamodel-code-generator
+      - name: Install + build (both langs)
+        run: |
+          cd ts && pnpm install --frozen-lockfile && pnpm -r build && cd ..
+          cd py && uv sync --frozen && uv build --all && cd ..
+      - name: Test
+        run: |
+          cd ts && pnpm -r test && cd ..
+          cd py && uv run pytest -v && cd ..
+      - name: Interop
+        run: bash tests/interop/run.sh
+      - name: Verify lockstep version on tag
+        run: |
+          TAG="${GITHUB_REF_NAME#v}"
+          fail=0
+          for pkg in ts/packages/protocol ts/packages/over-memory ts/packages/over-redis ts/packages/codegen; do
+            ver="$(jq -r .version "$pkg/package.json")"
+            if [[ "$ver" != "$TAG" ]]; then echo "$pkg version $ver != tag $TAG"; fail=1; fi
+          done
+          for pkg in py/packages/protocol py/packages/over-memory py/packages/over-redis; do
+            ver="$(grep -E '^version' "$pkg/pyproject.toml" | head -1 | sed -E 's/version\s*=\s*"([^"]+)"/\1/')"
+            if [[ "$ver" != "$TAG" ]]; then echo "$pkg version $ver != tag $TAG"; fail=1; fi
+          done
+          [[ "$fail" -eq 0 ]]
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
