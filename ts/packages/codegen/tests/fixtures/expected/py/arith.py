@@ -2,10 +2,7 @@
 # DO NOT EDIT. Re-run codegen to update.
 from __future__ import annotations
 from abc import ABC, abstractmethod
-from pydantic import BaseModel, ConfigDict
 from clamator_protocol import ClamatorClient, Contract, MethodEntry
-
-from __future__ import annotations
 
 from pydantic import BaseModel, ConfigDict
 
