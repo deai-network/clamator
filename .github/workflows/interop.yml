@@ -1,0 +1,49 @@
+name: Interop
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  cross-language:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    services:
+      redis:
+        image: redis:7-alpine
+        ports: ['6379:6379']
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 1s
+          --health-timeout 1s
+          --health-retries 30
+    env:
+      REDIS_URL: redis://localhost:6379
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9.12.0
+      - name: Install uv
+        run: pipx install uv
+      - name: Install datamodel-code-generator
+        run: pipx install datamodel-code-generator
+      - name: pnpm install
+        run: cd ts && pnpm install --frozen-lockfile
+      - name: uv sync
+        run: cd py && uv sync --frozen
+      - name: Build TS packages
+        run: cd ts && pnpm -r build
+      - name: Run interop scenarios
+        run: bash tests/interop/run.sh
+        env:
+          # Compose-up not needed; the service container above provides redis.
+          INTEROP_USE_EXTERNAL_REDIS: '1'
