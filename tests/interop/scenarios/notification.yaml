@@ -1,0 +1,9 @@
+name: notification fire-and-forget
+matrix: both
+contract: notifications
+calls:
+  - method: notifications.ping
+    params: { tag: "x" }
+    notification: true
+    expect:
+      kind: notification

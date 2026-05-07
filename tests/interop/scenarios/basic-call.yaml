@@ -1,0 +1,10 @@
+name: basic call
+matrix: both
+contract: arith
+calls:
+  - method: arith.add
+    params: { a: 2, b: 3 }
+    expect: { result: { sum: 5 } }
+  - method: arith.echoText
+    params: { text: "hello" }
+    expect: { result: { text: "hello" } }

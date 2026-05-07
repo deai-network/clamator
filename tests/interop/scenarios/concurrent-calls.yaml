@@ -1,0 +1,9 @@
+name: 100 concurrent calls
+matrix: both
+contract: arith
+client:
+  concurrent: 100
+calls:
+  - method: arith.add
+    params: { a: 1, b: 1 }
+    expect: { result: { sum: 2 } }

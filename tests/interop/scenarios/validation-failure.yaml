@@ -1,0 +1,9 @@
+name: validation failure
+matrix: both
+contract: arith
+calls:
+  - method: arith.add
+    params: { a: "two", b: 3 }
+    expect:
+      error:
+        code: -32602

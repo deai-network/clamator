@@ -1,0 +1,10 @@
+name: error mapping
+matrix: both
+contract: arith
+calls:
+  - method: arith.divide
+    params: { a: 10, b: 0 }
+    expect:
+      error:
+        code: -32000
+        messageMatches: "division by zero"

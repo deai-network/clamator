@@ -1,0 +1,12 @@
+name: client timeout
+matrix: both
+contract: arith
+client:
+  defaultTimeoutMs: 100
+calls:
+  - method: arith.slowAdd
+    params: { a: 1, b: 2, sleepMs: 800 }
+    expect:
+      error:
+        kind: transport-error
+        messageMatches: "timeout"

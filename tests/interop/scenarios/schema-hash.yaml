@@ -1,0 +1,5 @@
+name: schema-hash manifest cross-side equality
+matrix: ts-only
+calls: []
+expect:
+  manifestEqualsAcrossSides: true

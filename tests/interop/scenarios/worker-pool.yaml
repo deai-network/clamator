@@ -1,0 +1,11 @@
+name: worker pool fairness
+matrix: both
+contract: arith
+servers: 2
+calls:
+  - method: arith.add
+    params: { a: 1, b: 1 }
+    repeat: 50
+    expect:
+      result: { sum: 2 }
+      distributionRoughlyEven: true

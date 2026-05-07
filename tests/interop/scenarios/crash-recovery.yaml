@@ -1,0 +1,12 @@
+name: crash recovery via XCLAIM
+matrix: both
+contract: arith
+servers: 2
+crashServerAfterMs: 100
+consumerClaimIdleMs: 200
+client:
+  defaultTimeoutMs: 5000
+calls:
+  - method: arith.add
+    params: { a: 1, b: 2 }
+    expect: { result: { sum: 3 } }
