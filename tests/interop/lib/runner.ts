@@ -302,7 +302,6 @@ async function regenFixtures(outDir: string = GENERATED_DIR): Promise<void> {
 
 function expandCallsForClient(
   calls: ScenarioCall[],
-  concurrent: number,
 ): Array<{ method: string; params?: unknown; notification?: boolean }> {
   const base: Array<{ method: string; params?: unknown; notification?: boolean }> = [];
   for (const c of calls) {
@@ -311,13 +310,7 @@ function expandCallsForClient(
       base.push({ method: c.method, params: c.params, notification: c.notification ?? false });
     }
   }
-  if (concurrent <= 1) return base;
-  // Replicate base `concurrent` times
-  const expanded: Array<{ method: string; params?: unknown; notification?: boolean }> = [];
-  for (let i = 0; i < concurrent; i++) {
-    for (const c of base) expanded.push(c);
-  }
-  return expanded;
+  return base;
 }
 
 // ---------------------------------------------------------------------------
@@ -468,15 +461,16 @@ async function runDirectionalScenario(
       }, s.crashServerAfterMs);
     }
 
-    // Build client call list (with concurrent/repeat expansion)
+    // Build client call list. When concurrent > 1, the driver fans out the call list
+    // N times in parallel — the runner passes the base list and concurrent count.
     const concurrent = s.client?.concurrent ?? 1;
-    const expandedCalls = expandCallsForClient(s.calls, concurrent);
+    const baseCalls = expandCallsForClient(s.calls);
 
     const clientCfg: Record<string, unknown> = {
       redisUrl: REDIS_URL,
       keyPrefix: tag,
       defaultTimeoutMs: s.client?.defaultTimeoutMs ?? 5000,
-      calls: expandedCalls,
+      calls: baseCalls,
       concurrent: concurrent > 1 ? concurrent : undefined,
       generatedDir: path.join(ROOT, 'tests/interop/generated/py'),
     };

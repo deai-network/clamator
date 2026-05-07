@@ -16,12 +16,39 @@ interface Input {
   keyPrefix: string;
   defaultTimeoutMs?: number;
   calls: Call[];
+  concurrent?: number;
 }
 
 async function readStdin(): Promise<Input> {
   const chunks: string[] = [];
   for await (const chunk of process.stdin) chunks.push(chunk.toString());
   return JSON.parse(chunks.join('')) as Input;
+}
+
+async function invokeCall(
+  client: RedisRpcClient,
+  call: Call,
+): Promise<Record<string, unknown>> {
+  const dot = call.method.indexOf('.');
+  const service = call.method.slice(0, dot);
+  const method = call.method.slice(dot + 1);
+  try {
+    if (call.notification) {
+      await client.notify(service, method, call.params);
+      return { ok: true, kind: 'notification' };
+    } else {
+      const r = await client.call(service, method, call.params);
+      return { ok: true, kind: 'result', result: r };
+    }
+  } catch (e) {
+    if (e instanceof RpcError) {
+      return { ok: false, kind: 'rpc-error', code: e.code, message: e.message, data: e.data };
+    } else if (e instanceof ClamatorTransportError) {
+      return { ok: false, kind: 'transport-error', message: (e as Error).message };
+    } else {
+      return { ok: false, kind: 'unknown-error', message: String(e) };
+    }
+  }
 }
 
 async function main() {
@@ -31,29 +58,24 @@ async function main() {
     redis, keyPrefix: cfg.keyPrefix, defaultTimeoutMs: cfg.defaultTimeoutMs ?? 5000,
   });
   await client.start();
-  const results: Record<string, unknown>[] = [];
-  for (const call of cfg.calls) {
-    const dot = call.method.indexOf('.');
-    const service = call.method.slice(0, dot);
-    const method = call.method.slice(dot + 1);
-    try {
-      if (call.notification) {
-        await client.notify(service, method, call.params);
-        results.push({ ok: true, kind: 'notification' });
-      } else {
-        const r = await client.call(service, method, call.params);
-        results.push({ ok: true, kind: 'result', result: r });
-      }
-    } catch (e) {
-      if (e instanceof RpcError) {
-        results.push({ ok: false, kind: 'rpc-error', code: e.code, message: e.message, data: e.data });
-      } else if (e instanceof ClamatorTransportError) {
-        results.push({ ok: false, kind: 'transport-error', message: (e as Error).message });
-      } else {
-        results.push({ ok: false, kind: 'unknown-error', message: String(e) });
-      }
+
+  let results: Record<string, unknown>[];
+
+  if (cfg.concurrent && cfg.concurrent > 1) {
+    // Fan out: run the call list cfg.concurrent times in parallel
+    const fans: Array<Promise<Record<string, unknown>[]>> = [];
+    for (let i = 0; i < cfg.concurrent; i++) {
+      fans.push(Promise.all(cfg.calls.map(call => invokeCall(client, call))));
+    }
+    const batches = await Promise.all(fans);
+    results = batches.flat();
+  } else {
+    results = [];
+    for (const call of cfg.calls) {
+      results.push(await invokeCall(client, call));
     }
   }
+
   console.log(JSON.stringify({ results }));
   await client.stop();
   await redis.quit();
