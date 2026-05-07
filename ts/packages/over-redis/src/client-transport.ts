@@ -27,6 +27,9 @@ export class ClientRedisTransport implements Transport {
   private pending = new Map<string, Pending>();
   private replyLoop: Promise<void> | null = null;
   private replyLoopAbort = false;
+  // Dedicated connection for the blocking XREAD reply loop, so that
+  // xadd calls in send() are not queued behind the blocking read.
+  private replyRedis: Redis | null = null;
 
   constructor(private readonly opts: ClientTransportOptions) {
     this.instanceId = opts.instanceId ?? randomUUID();
@@ -86,6 +89,9 @@ export class ClientRedisTransport implements Transport {
     if (this.state === 'started') return;
     this.state = 'started';
     this.replyLoopAbort = false;
+    // Use a dedicated duplicate connection for the blocking XREAD so that
+    // xadd commands in send() are not queued behind the blocking read.
+    this.replyRedis = this.opts.redis.duplicate();
     this.replyLoop = this.runReplyLoop().catch(err => {
       // surface fatal loop errors
       console.error('[clamator/over-redis] reply loop fatal:', err);
@@ -95,6 +101,8 @@ export class ClientRedisTransport implements Transport {
   async stop(): Promise<void> {
     if (this.state !== 'started') { this.state = 'stopped'; return; }
     this.replyLoopAbort = true;
+    // Disconnect the reply connection to unblock the XREAD immediately.
+    try { this.replyRedis?.disconnect(); } catch { /* ignore */ }
     try { await this.replyLoop; } catch { /* ignore */ }
     for (const [id, p] of this.pending.entries()) {
       clearTimeout(p.timer);
@@ -102,14 +110,19 @@ export class ClientRedisTransport implements Transport {
       this.pending.delete(id);
     }
     try { await this.opts.redis.del(this.replyStream); } catch { /* best effort */ }
+    try { await this.replyRedis?.quit(); } catch { /* best effort */ }
+    this.replyRedis = null;
     this.state = 'stopped';
   }
 
   private async runReplyLoop(): Promise<void> {
-    let lastId = '$';
+    // Use '0-0' rather than '$' so replies are never missed between iterations.
+    // The reply stream is unique per client instance, so reading from the
+    // beginning is always correct and safe.
+    let lastId = '0-0';
     while (!this.replyLoopAbort) {
       try {
-        const result = await this.opts.redis.xread('BLOCK', 1000, 'STREAMS', this.replyStream, lastId);
+        const result = await this.replyRedis!.xread('BLOCK', 1000, 'STREAMS', this.replyStream, lastId);
         if (!result) continue;
         for (const [, entries] of result as [string, [string, string[]][]][]) {
           for (const [entryId, fields] of entries) {

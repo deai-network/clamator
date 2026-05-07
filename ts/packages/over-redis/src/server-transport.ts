@@ -21,6 +21,11 @@ export class ServerRedisTransport implements Transport {
   private state: 'idle' | 'started' | 'stopped' = 'idle';
   private loops: Promise<void>[] = [];
   private abort = false;
+  private reclaimWakers: Set<() => void> = new Set();
+  // Dedicated connection per service for the blocking XREADGROUP call so that
+  // xadd (reply), xack, and xautoclaim on the main connection are never
+  // queued behind the blocking read.
+  private blockingConns: Redis[] = [];
 
   constructor(private readonly opts: ServerTransportOptions) {
     this.instanceId = opts.instanceId ?? randomUUID();
@@ -52,7 +57,11 @@ export class ServerRedisTransport implements Transport {
         const msg = (e as Error).message;
         if (!msg.includes('BUSYGROUP')) throw e;
       }
-      this.loops.push(this.runConsumerLoop(service));
+      // Dedicated connection for blocking XREADGROUP so the main connection
+      // stays free for non-blocking operations (xadd, xack, xautoclaim).
+      const blockingRedis = this.opts.redis.duplicate();
+      this.blockingConns.push(blockingRedis);
+      this.loops.push(this.runConsumerLoop(service, blockingRedis));
       this.loops.push(this.runReclaimLoop(service));
     }
   }
@@ -60,21 +69,33 @@ export class ServerRedisTransport implements Transport {
   async stop(): Promise<void> {
     if (this.state !== 'started') { this.state = 'stopped'; return; }
     this.abort = true;
+    // Wake up any sleeping reclaim loops so they can check abort and exit promptly.
+    for (const wake of this.reclaimWakers) wake();
+    this.reclaimWakers.clear();
+    // Disconnect blocking connections to unblock XREADGROUP immediately.
+    for (const conn of this.blockingConns) {
+      try { conn.disconnect(); } catch { /* ignore */ }
+    }
     const grace = this.opts.shutdownGraceMs ?? 5000;
     await Promise.race([
       Promise.allSettled(this.loops),
       new Promise(r => setTimeout(r, grace)),
     ]);
+    // Clean up dedicated blocking connections.
+    for (const conn of this.blockingConns) {
+      try { await conn.quit(); } catch { /* best effort */ }
+    }
+    this.blockingConns = [];
     this.state = 'stopped';
   }
 
-  private async runConsumerLoop(service: string): Promise<void> {
+  private async runConsumerLoop(service: string, blockingRedis: Redis): Promise<void> {
     const stream = commandStream(this.opts.keyPrefix, service);
     const group = consumerGroupName(service);
     const consumer = consumerName(service, this.instanceId);
     while (!this.abort) {
       try {
-        const result = await this.opts.redis.xreadgroup(
+        const result = await blockingRedis.xreadgroup(
           'GROUP', group, consumer, 'COUNT', 16, 'BLOCK', 1000,
           'STREAMS', stream, '>',
         );
@@ -91,6 +112,14 @@ export class ServerRedisTransport implements Transport {
     }
   }
 
+  private interruptibleSleep(ms: number): Promise<void> {
+    return new Promise<void>(resolve => {
+      const timer = setTimeout(() => { this.reclaimWakers.delete(wake); resolve(); }, ms);
+      const wake = () => { clearTimeout(timer); this.reclaimWakers.delete(wake); resolve(); };
+      this.reclaimWakers.add(wake);
+    });
+  }
+
   private async runReclaimLoop(service: string): Promise<void> {
     const stream = commandStream(this.opts.keyPrefix, service);
     const group = consumerGroupName(service);
@@ -98,7 +127,7 @@ export class ServerRedisTransport implements Transport {
     const idleThreshold = this.opts.consumerClaimIdleMs ?? 60_000;
     while (!this.abort) {
       try {
-        await new Promise(r => setTimeout(r, Math.max(1000, idleThreshold / 4)));
+        await this.interruptibleSleep(Math.max(1000, idleThreshold / 4));
         if (this.abort) return;
         const claimed = await this.opts.redis.xautoclaim(
           stream, group, consumer, idleThreshold, '0', 'COUNT', 32,
