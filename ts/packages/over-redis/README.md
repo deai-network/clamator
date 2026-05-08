@@ -127,6 +127,30 @@ Multiple `RedisRpcServer` instances sharing the same `keyPrefix` form a competin
 
 **Per-service dispatch is serialized within a single server.** Each registered service has its own consumer loop that reads up to 16 messages per XREADGROUP poll and processes them one at a time (`await` per message; no `asyncio.create_task`). Multiple services registered on the same server run their own consumer loops concurrently, but two requests for the same service on the same server are not parallelized. To process one service's requests in parallel, run multiple `RedisRpcServer` instances sharing the same `keyPrefix` — the consumer group splits work between them.
 
+## Fire-and-forget operations
+
+Operations the caller doesn't need a reply for — telemetry, cache invalidations, status pings — should be modeled as notifications in the contract (`defineNotification` on the TS side; `MethodEntry(result_model=None, ...)` on the Py side). The generated proxy emits a typed notification method that returns once the request envelope is XADDed to Redis; it does not wait for the server to process.
+
+```typescript
+import { RedisRpcClient } from '../src/index.js';
+import { ArithClient } from './generated/arith.js';
+
+// Fire-and-forget: notification proxies return once the request is queued in Redis;
+// they do not wait for the server to process. Handlers must be idempotent — see
+// "Worker-pool semantics" for the at-least-once delivery details.
+export async function fireNotification(keyPrefix: string) {
+  const client = new RedisRpcClient({ keyPrefix });
+  await client.start();
+  const arith = new ArithClient(client);
+  await arith.ping({});
+  await client.stop();
+}
+```
+
+(Verbatim from `ts/packages/over-redis/tests/fire-and-forget.example.ts:1-13`. In your own code, replace `../src/index.js` with `@clamator/over-redis`.)
+
+The await resolves once the message is on the stream. It does not confirm the server received, processed, or finished the call. Notification handlers run under the same at-least-once delivery semantics as method handlers — design them to be idempotent.
+
 ## Authorization
 
 clamator has no authorization at the RPC layer. Any process that can read/write this Redis instance can call any registered method or send any notification — there is no caller identity in the wire envelope.
