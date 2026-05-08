@@ -6,6 +6,8 @@
 
 Polyglot TS↔Py RPC over pluggable transports. JSON-RPC 2.0 envelopes; Zod as contract source of truth; codegen for Python.
 
+clamator lets a TypeScript process and a Python process call each other's methods over JSON-RPC 2.0, with Zod as the single source of truth for the contract and Python wrappers generated from it. One contract definition keeps types and validation in lockstep across both languages by construction, and the transport is swappable — an in-process loopback for tests, Redis streams for production. Reach for clamator when a TS service and a Py service share a contract surface and the alternative is hand-rolling request/response shapes twice.
+
 > **Pre-1.0:** API stability not guaranteed. Minor versions may break.
 
 See [`docs/2026-05-07-clamator-design.md`](docs/2026-05-07-clamator-design.md) for the design spec.
