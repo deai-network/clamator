@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, afterEach } from 'vitest';
+import { describe, it, expect, afterEach } from 'vitest';
 import IORedis from 'ioredis';
 import { RedisRpcServer, RedisRpcClient } from '../src/index.js';
 import { arithContract } from './contracts/arith.js';
