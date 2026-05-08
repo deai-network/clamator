@@ -207,6 +207,14 @@ The await resolves once the message is on the stream. It does not confirm the se
 
 clamator's RPC surface is request/reply (and fire-and-forget for notifications). It does not provide a server-to-client streaming or progress channel — the typed proxy is a single round-trip. If you need actual monitoring and control of long-running background processes (start, stop, query state, report progress, cancel, sequential and parallel children, persistence across restarts), which is a different concern from RPC, look at [Optio](https://github.com/deai-network/optio): a Python process-management framework that handles exactly that.
 
+## Re-entrancy
+
+**Cross-service or cross-`keyPrefix` re-entrancy is safe.** A handler can `await client.call(...)` against a different service, or a different `keyPrefix` via a different `RedisRpcClient`, without issue — different streams, different consumer groups, no shared lock.
+
+**Same-service same-server re-entrancy deadlocks.** A handler that calls `await client.call('myservice', 'foo', ...)` to invoke its own service's method on the same server will deadlock: the consumer loop reading that service's stream is held by the outer handler, so the inner request sits in the stream forever, and the outer handler waits forever for the inner reply.
+
+**Don't go through the RPC layer for in-process composition.** If a handler needs the logic of another method on the same service, factor that logic into a regular function or call the other handler directly (handlers in the same `handlers` literal share scope; class-based handlers can call `this.foo(...)`). The RPC layer is for wire-side routing; once a request is dispatched, you have direct access to your own code, and a function call achieves the same result with zero serialization, zero validation overhead, and no deadlock risk.
+
 ## Authorization
 
 clamator has no authorization at the RPC layer. Any process that can read/write this Redis instance can call any registered method or send any notification — there is no caller identity in the wire envelope.
