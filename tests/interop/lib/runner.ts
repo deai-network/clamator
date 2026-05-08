@@ -540,23 +540,53 @@ async function runDirectionalScenario(
   }
 }
 
-async function runScenario(s: Scenario): Promise<RunResult[]> {
-  // Special case: schema-hash (ts-only, runner-internal)
-  if (s.name === 'schema-hash manifest cross-side equality') {
-    return [await runSchemaHashScenario(s)];
-  }
+// A flat unit of work: either a directional run or the schema-hash special case.
+type WorkUnit =
+  | { kind: 'directional'; scenario: Scenario; server: 'ts' | 'py'; client: 'ts' | 'py' }
+  | { kind: 'schema-hash'; scenario: Scenario };
 
-  const directions: Array<{ server: 'ts' | 'py'; client: 'ts' | 'py' }> =
-    s.matrix === 'ts-only'
-      ? [{ server: 'ts', client: 'ts' }]
-      : s.matrix === 'py-only'
-        ? [{ server: 'py', client: 'py' }]
-        : [{ server: 'ts', client: 'py' }, { server: 'py', client: 'ts' }];
-
-  const results: RunResult[] = [];
-  for (const dir of directions) {
-    results.push(await runDirectionalScenario(s, dir.server, dir.client));
+function expandScenarios(scenarios: Scenario[]): WorkUnit[] {
+  const units: WorkUnit[] = [];
+  for (const s of scenarios) {
+    if (s.name === 'schema-hash manifest cross-side equality') {
+      units.push({ kind: 'schema-hash', scenario: s });
+      continue;
+    }
+    const directions: Array<{ server: 'ts' | 'py'; client: 'ts' | 'py' }> =
+      s.matrix === 'ts-only'
+        ? [{ server: 'ts', client: 'ts' }]
+        : s.matrix === 'py-only'
+          ? [{ server: 'py', client: 'py' }]
+          : [{ server: 'ts', client: 'py' }, { server: 'py', client: 'ts' }];
+    for (const dir of directions) {
+      units.push({ kind: 'directional', scenario: s, server: dir.server, client: dir.client });
+    }
   }
+  return units;
+}
+
+async function executeUnit(u: WorkUnit): Promise<RunResult> {
+  if (u.kind === 'schema-hash') return runSchemaHashScenario(u.scenario);
+  return runDirectionalScenario(u.scenario, u.server, u.client);
+}
+
+// Bounded parallel worker pool. Order-preserving via indexed results.
+async function runWithLimit<T, R>(
+  items: T[],
+  limit: number,
+  worker: (item: T, index: number) => Promise<R>,
+): Promise<R[]> {
+  const results: R[] = new Array(items.length);
+  let next = 0;
+  const runOne = async (): Promise<void> => {
+    while (true) {
+      const i = next++;
+      if (i >= items.length) return;
+      results[i] = await worker(items[i]!, i);
+    }
+  };
+  const workers = Math.max(1, Math.min(limit, items.length));
+  await Promise.all(Array.from({ length: workers }, runOne));
   return results;
 }
 
@@ -581,15 +611,16 @@ async function main(): Promise<void> {
     const scenarios = loadScenarios();
     console.log(`[runner] Loaded ${scenarios.length} scenario(s)`);
 
-    const allResults: RunResult[] = [];
-    for (const s of scenarios) {
-      console.log(`\n[runner] Running: ${s.name}`);
-      const results = await runScenario(s);
-      allResults.push(...results);
-      for (const r of results) {
-        console.log(`  ${r.passed ? 'PASS' : 'FAIL'}  ${r.name}  (${r.direction})${r.reason ? `\n       ${r.reason}` : ''}`);
-      }
-    }
+    const units = expandScenarios(scenarios);
+    const concurrency = Math.max(1, Number(process.env['INTEROP_CONCURRENCY'] ?? '6'));
+    console.log(`[runner] Running ${units.length} directional run(s) with concurrency=${concurrency}`);
+
+    const allResults = await runWithLimit(units, concurrency, async (u) => {
+      const r = await executeUnit(u);
+      // Print as each completes (order is non-deterministic during run).
+      console.log(`  ${r.passed ? 'PASS' : 'FAIL'}  ${r.name}  (${r.direction})${r.reason ? `\n       ${r.reason}` : ''}`);
+      return r;
+    });
 
     console.log('\n--- Summary ---');
     for (const r of allResults) {
