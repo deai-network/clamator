@@ -33,53 +33,46 @@ Run [`@clamator/codegen`](https://www.npmjs.com/package/@clamator/codegen) to em
 npx @clamator/codegen --src contracts --out-ts generated --ts-contract-import '../contracts/arith.js'
 ```
 
-The following test demonstrates both the server and client sides round-trip together using the generated `ArithClient` proxy and `ArithService` interface:
+Server-side — register handlers and start:
 
 ```typescript
-import { describe, it, expect, afterEach } from 'vitest';
-import IORedis from 'ioredis';
-import { RedisRpcServer, RedisRpcClient } from '../src/index.js';
+import type IORedis from 'ioredis';
+import { RedisRpcServer } from '../src/index.js';
 import { arithContract } from './contracts/arith.js';
-import { ArithClient, type ArithService } from './generated/arith.js';
+import type { ArithService } from './generated/arith.js';
 
-const REDIS_URL = process.env.REDIS_URL;
-
-describe.skipIf(!REDIS_URL)('redis round-trip via codegen typed proxy', () => {
-  let prefix: string;
-
-  afterEach(async () => {
-    if (!REDIS_URL) return;
-    const r = new IORedis(REDIS_URL!);
-    const keys = await r.keys(`${prefix}:*`);
-    if (keys.length) await r.del(...keys);
-    await r.quit();
-  });
-
-  it('round-trips a successful call through ArithClient', async () => {
-    prefix = `clam-test-${Math.random().toString(36).slice(2, 8)}`;
-    const sredis = new IORedis(REDIS_URL!);
-    const credis = new IORedis(REDIS_URL!);
-    const server = new RedisRpcServer({ redis: sredis, keyPrefix: prefix }); // injected redis= not closed by stop() — caller owns lifecycle; omit to let transport own it
-    const handlers: ArithService = {
-      add: async ({ a, b }) => ({ sum: a + b }),
-      ping: async (_params) => {},
-    };
-    server.registerService(arithContract, handlers); // must precede start() — post-start registrations are silently ignored, no consumer group or read loop is created
-    await server.start();
-    const client = new RedisRpcClient({ redis: credis, keyPrefix: prefix, defaultTimeoutMs: 3000 }); // default timeout 30 s; no auto-retry on disconnect; timeouts not propagated to server
-    await client.start();
-    const arith = new ArithClient(client);
-    const r = await arith.add({ a: 2, b: 3 });
-    expect(r).toEqual({ sum: 5 });
-    await client.stop();
-    await server.stop(); // drains in-flight handlers up to graceMs (default 5 s), then stops transport
-    await sredis.quit();
-    await credis.quit();
-  });
-});
+export async function buildArithServer(opts: { redis: IORedis; keyPrefix: string }) {
+  const server = new RedisRpcServer({ redis: opts.redis, keyPrefix: opts.keyPrefix }); // injected redis= not closed by stop() — caller owns lifecycle; omit to let transport own it
+  const handlers: ArithService = {
+    add: async ({ a, b }) => ({ sum: a + b }),
+    ping: async (_params) => {},
+  };
+  server.registerService(arithContract, handlers); // must precede start() — post-start registrations are silently ignored, no consumer group or read loop is created
+  await server.start();
+  return server;
+}
 ```
 
-(Verbatim from `ts/packages/over-redis/tests/proxy-round-trip.test.ts:1-41`.)
+(Verbatim from `ts/packages/over-redis/tests/server.ts:1-15`. In your own code, replace `../src/index.js` with `@clamator/over-redis`.)
+
+Client-side — call the typed proxy:
+
+```typescript
+import type IORedis from 'ioredis';
+import { RedisRpcClient } from '../src/index.js';
+import { ArithClient } from './generated/arith.js';
+
+export async function callArith(opts: { redis: IORedis; keyPrefix: string }) {
+  const client = new RedisRpcClient({ redis: opts.redis, keyPrefix: opts.keyPrefix, defaultTimeoutMs: 3000 }); // default timeout 30 s; no auto-retry on disconnect; timeouts not propagated to server
+  await client.start();
+  const arith = new ArithClient(client);
+  const r = await arith.add({ a: 2, b: 3 });
+  await client.stop();
+  return r;
+}
+```
+
+(Verbatim from `ts/packages/over-redis/tests/client.ts:1-12`. In your own code, replace `../src/index.js` with `@clamator/over-redis`.)
 
 By default the connection is built from `$REDIS_URL` (or `redis://localhost:6379`). Pass `redisUrl` for a different URL, or `redis` for a pre-built `ioredis` instance.
 
