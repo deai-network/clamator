@@ -134,6 +134,16 @@ What the client sees:
 - A client-side call that exceeds `default_timeout_ms` raises `clamator_protocol.ClamatorTransportError("call timeout")` from the transport layer, NOT `asyncio.TimeoutError`. The same exception class surfaces when no server is consuming the request stream — there is no distinct "no consumer" error.
 - Envelope-level parse and validation failures use the JSON-RPC reserved codes: `-32700` (parse error), `-32600` (invalid request), `-32601` (method not found), `-32602` (invalid params), `-32603` (internal error).
 
+## Failure as data vs. `RpcError`
+
+Two patterns work for handlers that need to refuse a request:
+
+1. **Raise `RpcError`.** Surfaces as a JSON-RPC error envelope on the client side; the proxy method re-raises `RpcError` carrying the code/message/data. Right for *exceptional* refusals — protocol violations, missing-resource cases, and anything the client should treat as a raised exception.
+
+2. **Return a result-shape union.** Declare the method's `result_model` as a Pydantic discriminated union over success and refusal cases — e.g., `RootModel[Annotated[Union[Success, Refusal], Field(discriminator='ok')]]` with `Success(ok=True, value=...)` vs `Refusal(ok=False, reason=Literal['not-found', 'conflict', ...])`. The handler returns the appropriate variant. The client sees a normal success envelope and matches on `result.ok`. Right for *expected* refusals — state-machine guards ("process already running"), capability checks, validation outcomes the application treats as data rather than as an error.
+
+The two patterns compose. Use unions for state-machine refusals the application is expected to handle; reserve `RpcError` for genuine errors that should propagate as raised exceptions. Codegen-emitted proxy methods return the full union type, so type checkers (mypy / pyright) enforce exhaustive matching at the call site.
+
 ## Authorization
 
 clamator has no authorization at the protocol or transport layer. Any process that can reach the underlying transport — a Redis instance for `over-redis`, the parent process for `over-memory` — can call any registered method or send any notification on any registered service.

@@ -129,6 +129,16 @@ What the client sees:
 - A client-side call that exceeds `defaultTimeoutMs` rejects with `ClamatorTransportError('call timeout')` from the transport layer. The same class surfaces when no server is consuming the request stream — there is no distinct "no consumer" error.
 - Envelope-level parse and validation failures use the JSON-RPC reserved codes: `-32700` (parse error), `-32600` (invalid request), `-32601` (method not found), `-32602` (invalid params), `-32603` (internal error).
 
+## Failure as data vs. `RpcError`
+
+Two patterns work for handlers that need to refuse a request:
+
+1. **Throw `RpcError`.** Surfaces as a JSON-RPC error envelope on the client side; the proxy method rejects with an `RpcError` carrying the code/message/data. Right for *exceptional* refusals — protocol violations, missing-resource cases, and anything the client should treat as a thrown exception.
+
+2. **Return a result-shape union.** Declare the method's `result` schema as a Zod discriminated union over success and refusal cases — e.g., `z.discriminatedUnion('ok', [z.object({ ok: z.literal(true), value: ... }), z.object({ ok: z.literal(false), reason: z.enum(['not-found', 'conflict', ...]) })])`. The handler returns the appropriate variant. The client sees a normal success envelope and switches on `result.ok`. Right for *expected* refusals — state-machine guards ("process already running"), capability checks, validation outcomes the application treats as data rather than as an error.
+
+The two patterns compose. Use unions for state-machine refusals the application is expected to handle; reserve `RpcError` for genuine errors that should propagate as thrown exceptions. Codegen-emitted proxy methods return the full union type, so TypeScript enforces exhaustive switching at the call site.
+
 ## Authorization
 
 clamator has no authorization at the protocol or transport layer. Any process that can reach the underlying transport — a Redis instance for `over-redis`, the parent process for `over-memory` — can call any registered method or send any notification on any registered service.
