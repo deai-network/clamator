@@ -49,6 +49,25 @@ const arith = defineContract('arith', {
 - `Transport`, `Dispatcher` — interfaces a custom transport adapter implements.
 - `RpcServerCore`, `RpcClientCore` — base classes the transport packages' `*RpcServer` / `*RpcClient` extend. Useful for building custom transport adapters or for type annotations across transport boundaries.
 
+## Base-class interface guarantees
+
+Both transport packages' `*RpcServer` classes (`MemoryRpcServer`, `RedisRpcServer`) extend `RpcServerCore`; both `*RpcClient` classes extend `RpcClientCore`. The base classes fix the common surface — what every transport must expose — and the methods listed below are defined on the base, not on the subclasses. Type your own code against `RpcServerCore | undefined` (or `RpcClientCore`) when writing wrappers that should accept either transport.
+
+**Import.** `import { RpcServerCore, RpcClientCore } from '@clamator/protocol';`.
+
+**Server interface (`RpcServerCore`).**
+
+- `registerService<M>(contract: Contract<string, M>, handlers: HandlersFor<M>): void` — register a service. Calling it twice with the same `contract.service` throws `Error('service "<name>" already registered on this server')`. Must be called *before* `start()`; new services registered after `start()` are silently ignored (the consumer-group / read loop is created only inside `start()`). Re-registering an already-registered service after `start()` throws the same `Error` as before-start.
+- `async start(): Promise<void>` — idempotent. Calling `start()` after `stop()` throws `Error('server has been stopped')`.
+- `async stop(opts?: ServerStopOptions): Promise<void>` — idempotent. `opts.graceMs` (default `5000`) bounds the drain of in-flight handlers before disconnecting from the transport.
+
+**Client interface (`RpcClientCore`).**
+
+- `call<P, R>(service, method, params, opts?: { timeoutMs?: number }): Promise<R>` and `notify<P>(service, method, params): Promise<void>` — the `ClamatorClient` interface. Codegen-emitted proxy classes accept any object satisfying this interface.
+- `async start(): Promise<void>` / `async stop(): Promise<void>` — same idempotency rules as the server.
+
+These guarantees apply uniformly across `@clamator/over-memory` and `@clamator/over-redis`. Transport-specific subclasses add construction options (e.g., `redis`, `keyPrefix`, `consumerClaimIdleMs` for `RedisRpcServer`; `bus` for `MemoryRpcServer`) but do not override the methods above.
+
 ## Version compatibility
 
 All seven clamator packages (TS + Py protocol, both transports on both languages, codegen) are released in lockstep — same `X.Y.Z` version, every time. The release-verification workflow refuses to publish a tag unless every package's manifest reports the matching version, and the same workflow runs the cross-language interop test suite. **Pin all your clamator packages to the same `X.Y.Z`** on both client and server sides — `@clamator/protocol@X.Y.Z` + `@clamator/over-redis@X.Y.Z` on the TS side, `clamator-protocol==X.Y.Z` + `clamator-over-redis==X.Y.Z` on the Py side.
@@ -138,6 +157,25 @@ Two patterns work for handlers that need to refuse a request:
 2. **Return a result-shape union.** Declare the method's `result` schema as a Zod discriminated union over success and refusal cases — e.g., `z.discriminatedUnion('ok', [z.object({ ok: z.literal(true), value: ... }), z.object({ ok: z.literal(false), reason: z.enum(['not-found', 'conflict', ...]) })])`. The handler returns the appropriate variant. The client sees a normal success envelope and switches on `result.ok`. Right for *expected* refusals — state-machine guards ("process already running"), capability checks, validation outcomes the application treats as data rather than as an error.
 
 The two patterns compose. Use unions for state-machine refusals the application is expected to handle; reserve `RpcError` for genuine errors that should propagate as thrown exceptions. Codegen-emitted proxy methods return the full union type, so TypeScript enforces exhaustive switching at the call site.
+
+## Common gateway integration
+
+When clamator sits behind an HTTP gateway (typically a TS API in front of a Py engine, or vice versa), the gateway translates the typed RPC reply into an HTTP response. Two recommendations:
+
+**Map `RpcError` codes to HTTP status by class.** The framework reserves `-32700` / `-32600` / `-32601` / `-32602` / `-32603` (parse / invalid request / method not found / invalid params / internal error). `-32601` and `-32602` are caller bugs and naturally map to `400`. `-32603` is `500`. Application-defined codes (`-32000` and below) are gateway-specific — map them per the meaning your handlers assign them.
+
+**Map result-union refusal `reason` strings to HTTP status by convention.** A typical mapping the gateway can implement once and reuse across endpoints:
+
+| `result.reason` | HTTP status |
+|---|---|
+| `not-found` | `404` |
+| `conflict`, `already-running`, `already-exists` | `409` |
+| `forbidden`, `not-authorized` | `403` |
+| `validation-failed`, `invalid-input` | `422` |
+| `not-launchable`, `precondition-failed` | `412` |
+| (default) | `409` (request was understood but cannot be satisfied) |
+
+Successful results (`result.ok === true`) map to `200`. The exhaustive `reason` union is part of the contract, so the gateway's `switch` is type-checked against it — adding a new refusal reason without updating the gateway is a compile-time error.
 
 ## Authorization
 

@@ -184,6 +184,44 @@ The Py file exports `<Method>Params` / `<Method>Result` Pydantic models (with `e
 
 **Identifier conventions.** The contract identifier is `<service>_contract` — the wire-side `service` name lowercased and snake-cased, with a `_contract` suffix. The ABC and Client class names are PascalCase versions of the service name. Method names that are camelCased in the contract (e.g., `addEvent`) become `snake_case` on the Py side (e.g., `add_event`); the `handler_attr` in each `MethodEntry` matches the snake_cased Py method name. Subclass the ABC to register a service: `class MyService(ArithService): async def add(self, params): ...`.
 
+### Discriminated-union result example
+
+When a method's `result` is a Zod `discriminatedUnion` — the canonical "failure as data" pattern (see [`@clamator/protocol`](https://www.npmjs.com/package/@clamator/protocol)'s "Failure as data vs. `RpcError`" section) — codegen wraps the variants in a `pydantic.RootModel` and the proxy returns that wrapper. Given a `launch.ts` contract whose `start.result` is `z.discriminatedUnion('ok', [{ok: true, runId}, {ok: false, reason}])`, codegen emits:
+
+```python
+class StartResult1(BaseModel):
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    ok: Literal[True]
+    run_id: str = Field(..., alias="runId")
+
+
+class StartResult2(BaseModel):
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    ok: Literal[False]
+    reason: Literal["not-launchable", "already-running", "not-found"]
+
+
+class StartResult(RootModel[StartResult1 | StartResult2]):
+    root: StartResult1 | StartResult2
+
+
+class LaunchClient:
+    def __init__(self, client: ClamatorClient) -> None:
+        self._client = client
+
+    async def start(self, params: StartParams, *, timeout_ms: int | None = None) -> StartResult:
+        raw = await self._client.call("launch", "start", params.model_dump(mode='json', by_alias=True), timeout_ms=timeout_ms)
+        return StartResult.model_validate(raw)
+```
+
+(Verbatim from `ts/packages/codegen/tests/fixtures/expected/py/launch.py:19-45`.)
+
+The variant classes are `<Method>Result1`, `<Method>Result2`, ... in source order. The wrapper `<Method>Result` is a `pydantic.RootModel` over their union — `model_validate(raw)` returns it, and `result.root.ok` discriminates the variant. The handler's return type is the same wrapper; return either variant directly and `result_model.model_validate(...)` accepts it. Both pyright and mypy enforce exhaustive matching against the union when consumers branch on `result.root.ok`.
+
 ## Drift detection via the manifest
 
 `--manifest <path>` writes a JSON file with content-addressed schema hashes per method and notification. The codegen CLI does not have a `--check` mode; drift detection is a pattern you run in CI:

@@ -7,7 +7,7 @@ describe('loadContracts', () => {
     const dir = path.resolve(__dirname, 'fixtures/contracts');
     const contracts = await loadContracts(dir);
     const names = contracts.map(c => c.contract.service).sort();
-    expect(names).toEqual(['arith', 'notifications']);
+    expect(names).toEqual(['arith', 'launch', 'notifications']);
   });
 
   it('attaches the source file path to each contract', async () => {

@@ -43,6 +43,25 @@ The single `methods` dict holds both methods and notifications. A `MethodEntry` 
 - `Transport`, `Dispatcher` — interfaces a custom transport adapter implements.
 - `RpcServerCore`, `RpcClientCore` — base classes the transport packages' `*RpcServer` / `*RpcClient` extend. Useful for building custom transport adapters or for type annotations across transport boundaries.
 
+## Base-class interface guarantees
+
+Both transport packages' `*RpcServer` classes (`MemoryRpcServer`, `RedisRpcServer`) inherit from `RpcServerCore`; both `*RpcClient` classes inherit from `RpcClientCore`. The base classes fix the common surface — what every transport must expose — and the methods listed below are defined on the base, not on the subclasses. Type your own code against `RpcServerCore | None` (or `RpcClientCore`) when writing wrappers that should accept either transport.
+
+**Import.** `from clamator_protocol import RpcServerCore, RpcClientCore`.
+
+**Server interface (`RpcServerCore`).**
+
+- `register_service(contract: Contract, instance: Any) -> None` — register a service. Calling it twice with the same `contract.service` raises `ValueError`. Must be called *before* `start()`; new services registered after `start()` are silently ignored (the consumer-group / read loop is created only inside `start()`). Re-registering an already-registered service after `start()` raises the same `ValueError` as before-start.
+- `async start() -> None` — idempotent. Calling `start()` after `stop()` raises `RuntimeError("server has been stopped")`.
+- `async stop(*, grace_ms: int = 5000) -> None` — idempotent. Drains in-flight handlers up to `grace_ms` before disconnecting from the transport.
+
+**Client interface (`RpcClientCore`).**
+
+- `async call(service, method, params, *, timeout_ms=None) -> Any` and `async notify(service, method, params) -> None` — the `ClamatorClient` Protocol. Codegen-emitted proxy classes accept any object satisfying this Protocol.
+- `async start() -> None` / `async stop() -> None` — same idempotency rules as the server.
+
+These guarantees apply uniformly across `clamator-over-memory` and `clamator-over-redis`. Transport-specific subclasses add construction kwargs (e.g., `redis`, `key_prefix`, `consumer_claim_idle_ms` for `RedisRpcServer`; `bus` for `MemoryRpcServer`) but do not override the methods above.
+
 ## Hand-built contracts
 
 The `Contract` and `MethodEntry` classes are first-class — you do not need to run codegen to use them. The "Defining a contract" snippet above is itself hand-built. Codegen exists to keep TS and Py contracts in lockstep when both languages consume the same wire-side service; if you only have a Py-side service, or if you need to build the contract dynamically at runtime (e.g., from a registry of handler functions keyed by command type), build the `Contract` by hand.
@@ -143,6 +162,25 @@ Two patterns work for handlers that need to refuse a request:
 2. **Return a result-shape union.** Declare the method's `result_model` as a Pydantic discriminated union over success and refusal cases — e.g., `RootModel[Annotated[Union[Success, Refusal], Field(discriminator='ok')]]` with `Success(ok=True, value=...)` vs `Refusal(ok=False, reason=Literal['not-found', 'conflict', ...])`. The handler returns the appropriate variant. The client sees a normal success envelope and matches on `result.ok`. Right for *expected* refusals — state-machine guards ("process already running"), capability checks, validation outcomes the application treats as data rather than as an error.
 
 The two patterns compose. Use unions for state-machine refusals the application is expected to handle; reserve `RpcError` for genuine errors that should propagate as raised exceptions. Codegen-emitted proxy methods return the full union type, so type checkers (mypy / pyright) enforce exhaustive matching at the call site.
+
+## Common gateway integration
+
+When clamator sits behind an HTTP gateway (typically a TS API in front of a Py engine, or vice versa), the gateway translates the typed RPC reply into an HTTP response. Two recommendations:
+
+**Map `RpcError` codes to HTTP status by class.** The framework reserves `-32700` / `-32600` / `-32601` / `-32602` / `-32603` (parse / invalid request / method not found / invalid params / internal error). `-32601` and `-32602` are caller bugs and naturally map to `400`. `-32603` is `500`. Application-defined codes (`-32000` and below) are gateway-specific — map them per the meaning your handlers assign them.
+
+**Map result-union refusal `reason` strings to HTTP status by convention.** A typical mapping the gateway can implement once and reuse across endpoints:
+
+| `result.reason` | HTTP status |
+|---|---|
+| `not-found` | `404` |
+| `conflict`, `already-running`, `already-exists` | `409` |
+| `forbidden`, `not-authorized` | `403` |
+| `validation-failed`, `invalid-input` | `422` |
+| `not-launchable`, `precondition-failed` | `412` |
+| (default) | `409` (request was understood but cannot be satisfied) |
+
+Successful results (`result.ok == True`) map to `200`. The exhaustive `reason` union is part of the contract, so the gateway's match is type-checked against it — adding a new refusal reason without updating the gateway is a static-analysis error.
 
 ## Authorization
 

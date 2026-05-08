@@ -24,7 +24,7 @@ describe('emitTs', () => {
     const outDir = await fs.mkdtemp(path.join(os.tmpdir(), 'clamator-emit-ts-'));
     const ir = lowerContracts(await loadContracts(srcDir), { jsonSchemaTarget: 'jsonSchema7' });
     const written = await emitTs(ir, { outDir, contractImportPath: '@/contracts/whatever' });
-    expect(written.map(p => path.basename(p)).sort()).toEqual(['arith.ts', 'notifications.ts']);
+    expect(written.map(p => path.basename(p)).sort()).toEqual(['arith.ts', 'launch.ts', 'notifications.ts']);
   });
 
   it('is idempotent: second emit produces identical bytes', async () => {

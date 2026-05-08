@@ -18,7 +18,7 @@ describe.skipIf(!hasDatamodelCodegen())('emitPy', () => {
     const outDir = await fs.mkdtemp(path.join(os.tmpdir(), 'clamator-emit-py-'));
     const ir = lowerContracts(await loadContracts(srcDir), { jsonSchemaTarget: 'jsonSchema7' });
     const { filesWritten } = await emitPy(ir, { outDir });
-    expect(filesWritten.map(p => path.basename(p)).sort()).toEqual(['arith.py', 'notifications.py']);
+    expect(filesWritten.map(p => path.basename(p)).sort()).toEqual(['arith.py', 'launch.py', 'notifications.py']);
     const arith = await fs.readFile(path.join(outDir, 'arith.py'), 'utf-8');
     const expected = await fs.readFile(path.resolve(__dirname, 'fixtures/expected/py/arith.py'), 'utf-8');
     // Normalize the AUTO-GENERATED header version so the snapshot survives release bumps.
