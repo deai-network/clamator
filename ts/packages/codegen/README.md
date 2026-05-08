@@ -70,6 +70,23 @@ Given a `--src` directory containing contract modules and an `--out-ts <dir>` an
 
 The `--ts-contract-import` flag controls the import path written into the emitted TS wrappers — supply the path that resolves to your contract module from the directory the wrappers will be imported from.
 
+## Emitted ABC shape (Python side)
+
+For each method in a contract, the Py emitter produces an abstract method on a `<Service>Service` ABC, typed in terms of the Pydantic models for params and result. Notifications produce abstract methods returning `None`. A representative slice:
+
+```python
+class ArithService(ABC):
+    @abstractmethod
+    async def add(self, params: AddParams) -> AddResult: ...
+
+    @abstractmethod
+    async def ping(self, params: PingParams) -> None: ...
+```
+
+(Verbatim from `py/packages/over-redis/tests/generated/arith.py:42-47`.)
+
+Method-name conversion: a Zod method declared as `addEvent` on the contract becomes `add_event` on the ABC (camelCase in TS, snake_case in Py). Subclass the ABC to register a service: `class MyService(ArithService): async def add(self, params): ...`. The TS side emits a sibling `<Service>Service` interface plus a `<Service>Client` proxy class; consult the matching `arith.ts` under the same `tests/generated/` directory for the TS surface.
+
 ## Links
 
 - Protocol packages: [`@clamator/protocol`](https://www.npmjs.com/package/@clamator/protocol), [`clamator-protocol`](https://pypi.org/project/clamator-protocol/)
