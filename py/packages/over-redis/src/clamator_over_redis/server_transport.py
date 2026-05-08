@@ -1,15 +1,18 @@
 from __future__ import annotations
+
 import asyncio
 import json
 import os
 import uuid
 from typing import Any
 
+from clamator_protocol import (
+    ClamatorTransportError,
+    Dispatcher,
+    parse_envelope,
+)
 from redis.asyncio import Redis
 
-from clamator_protocol import (
-    parse_envelope, ClamatorTransportError, Dispatcher,
-)
 from .keys import command_stream, consumer_group_name, consumer_name
 
 
@@ -78,7 +81,7 @@ class ServerRedisTransport:
                 asyncio.gather(*self._tasks, return_exceptions=True),
                 timeout=self._shutdown_grace_ms / 1000,
             )
-        except asyncio.TimeoutError:
+        except TimeoutError:
             pass
         self._tasks.clear()
         if self._owns_redis:

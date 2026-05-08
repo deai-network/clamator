@@ -1,12 +1,17 @@
 from __future__ import annotations
+
 import asyncio
 from typing import Any
 
 from clamator_protocol import (
-    parse_envelope, ClamatorTransportError,
-    Dispatcher, RequestEnvelope, NotificationEnvelope,
+    ClamatorTransportError,
+    Dispatcher,
+    NotificationEnvelope,
+    RequestEnvelope,
     build_error_response,
+    parse_envelope,
 )
+
 from .bus import MemoryBus
 
 
@@ -54,7 +59,7 @@ class MemoryTransport:
         loop.create_task(runner())
         try:
             return await asyncio.wait_for(fut, timeout=timeout)
-        except asyncio.TimeoutError as e:
+        except TimeoutError as e:
             self._pending.pop(str(parsed.id), None)
             raise ClamatorTransportError("call timeout") from e
 

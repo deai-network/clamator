@@ -1,10 +1,14 @@
 import asyncio
+
 import pytest
-from pydantic import BaseModel
+from clamator_over_memory import MemoryBus, MemoryRpcClient, MemoryRpcServer
 from clamator_protocol import (
-    Contract, MethodEntry, RpcError, ClamatorTransportError,
+    ClamatorTransportError,
+    Contract,
+    MethodEntry,
+    RpcError,
 )
-from clamator_over_memory import MemoryBus, MemoryRpcServer, MemoryRpcClient
+from pydantic import BaseModel
 
 
 class AddP(BaseModel):

@@ -1,7 +1,13 @@
 import pytest
 from clamator_protocol.envelope import (
-    parse_envelope, EnvelopeKind, SERVICE_RE, METHOD_RE,
-    build_request, build_notification, build_success_response, build_error_response,
+    METHOD_RE,
+    SERVICE_RE,
+    EnvelopeKind,
+    build_error_response,
+    build_notification,
+    build_request,
+    build_success_response,
+    parse_envelope,
 )
 
 

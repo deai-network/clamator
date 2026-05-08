@@ -1,8 +1,9 @@
 from __future__ import annotations
-from typing import Any, Awaitable, Callable, Protocol, runtime_checkable
+
+from collections.abc import Awaitable, Callable
+from typing import Any, Protocol, runtime_checkable
 
 from .envelope import Envelope
-
 
 Dispatcher = Callable[[Envelope], Awaitable[dict[str, Any] | None]]
 

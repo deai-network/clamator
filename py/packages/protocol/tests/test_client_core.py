@@ -1,6 +1,6 @@
 import pytest
 from clamator_protocol.client_core import RpcClientCore
-from clamator_protocol.error import RpcError, ClamatorProtocolError
+from clamator_protocol.error import ClamatorProtocolError, RpcError
 
 
 class FakeTransport:

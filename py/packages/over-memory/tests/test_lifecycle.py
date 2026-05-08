@@ -1,7 +1,7 @@
 import pytest
-from clamator_protocol import ClamatorTransportError
 from clamator_over_memory.bus import MemoryBus
 from clamator_over_memory.transport import MemoryTransport
+from clamator_protocol import ClamatorTransportError
 
 
 async def test_send_before_start_rejects():

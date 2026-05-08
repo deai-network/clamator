@@ -1,5 +1,8 @@
 from clamator_protocol.error import (
-    RpcError, ClamatorProtocolError, ClamatorTransportError, exception_to_error_data,
+    ClamatorProtocolError,
+    ClamatorTransportError,
+    RpcError,
+    exception_to_error_data,
 )
 
 

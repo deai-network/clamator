@@ -1,9 +1,9 @@
 import asyncio
-import pytest
+
+from clamator_over_redis import RedisRpcClient, RedisRpcServer
+from clamator_protocol import Contract, MethodEntry
 from pydantic import BaseModel
 from redis.asyncio import Redis
-from clamator_protocol import Contract, MethodEntry
-from clamator_over_redis import RedisRpcServer, RedisRpcClient
 
 
 class AddP(BaseModel):

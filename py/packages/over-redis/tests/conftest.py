@@ -1,5 +1,6 @@
 import os
 import secrets
+
 import pytest
 from redis.asyncio import Redis
 

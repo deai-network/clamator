@@ -1,6 +1,6 @@
 from __future__ import annotations
+
 from dataclasses import dataclass, field
-from typing import Type
 
 from pydantic import BaseModel
 
@@ -8,8 +8,8 @@ from pydantic import BaseModel
 @dataclass(frozen=True)
 class MethodEntry:
     """Runtime descriptor for a single method on a generated contract."""
-    params_model: Type[BaseModel]
-    result_model: Type[BaseModel] | None  # None for notifications
+    params_model: type[BaseModel]
+    result_model: type[BaseModel] | None  # None for notifications
     handler_attr: str  # attribute on the service-instance to invoke (snake_case)
 
 

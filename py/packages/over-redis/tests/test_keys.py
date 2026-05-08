@@ -1,5 +1,8 @@
 from clamator_over_redis.keys import (
-    command_stream, reply_stream, consumer_group_name, consumer_name,
+    command_stream,
+    consumer_group_name,
+    consumer_name,
+    reply_stream,
 )
 
 

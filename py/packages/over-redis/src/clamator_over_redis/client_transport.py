@@ -1,16 +1,20 @@
 from __future__ import annotations
+
 import asyncio
 import json
 import os
 import uuid
 from typing import Any
 
+from clamator_protocol import (
+    ClamatorTransportError,
+    Dispatcher,
+    NotificationEnvelope,
+    RequestEnvelope,
+    parse_envelope,
+)
 from redis.asyncio import Redis
 
-from clamator_protocol import (
-    parse_envelope, ClamatorTransportError, RequestEnvelope, NotificationEnvelope,
-    Dispatcher,
-)
 from .keys import command_stream, reply_stream
 
 
@@ -60,7 +64,7 @@ class ClientRedisTransport:
             raise ClamatorTransportError("xadd failed", cause=e) from e
         try:
             return await asyncio.wait_for(fut, timeout=timeout)
-        except asyncio.TimeoutError as e:
+        except TimeoutError as e:
             self._pending.pop(str(parsed.id), None)
             raise ClamatorTransportError("call timeout") from e
 
