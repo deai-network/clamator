@@ -29,6 +29,9 @@
   "dependencies": {
     "@clamator/protocol": "workspace:*"
   },
+  "peerDependencies": {
+    "zod": "^3.23.0"
+  },
   "devDependencies": {
     "typescript": "^5.6.0",
     "vitest": "^2.1.0",
