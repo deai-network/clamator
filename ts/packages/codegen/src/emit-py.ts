@@ -3,8 +3,7 @@ import fs from 'node:fs/promises';
 import { spawn } from 'node:child_process';
 import type { IrContract } from './ir.js';
 import { camelToSnake, kebabAndCamelToPascal } from './case.js';
-
-const VERSION = '0.1.0';
+import { VERSION } from './version.js';
 
 export interface EmitPyOptions {
   outDir: string;

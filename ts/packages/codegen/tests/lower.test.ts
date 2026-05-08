@@ -45,5 +45,5 @@ it('writeManifest emits stable JSON', async () => {
   await writeManifest(ir, file);
   const b = await fs.readFile(file, 'utf-8');
   expect(a).toBe(b);
-  expect(a).toMatch(/"generatedBy": "@clamator\/codegen v0\.1\.0"/);
+  expect(a).toMatch(/"generatedBy": "@clamator\/codegen v\d+\.\d+\.\d+"/);
 });

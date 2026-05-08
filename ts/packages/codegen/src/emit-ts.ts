@@ -2,8 +2,7 @@ import path from 'node:path';
 import fs from 'node:fs/promises';
 import type { IrContract } from './ir.js';
 import { kebabAndCamelToPascal } from './case.js';
-
-const VERSION = '0.1.0';
+import { VERSION } from './version.js';
 
 export interface EmitTsOptions {
   outDir: string;

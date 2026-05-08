@@ -1,5 +1,6 @@
 import fs from 'node:fs/promises';
 import type { IrContract } from './ir.js';
+import { VERSION } from './version.js';
 
 export interface Manifest {
   generatedBy: string;
@@ -8,7 +9,7 @@ export interface Manifest {
 
 export async function writeManifest(contracts: IrContract[], outPath: string): Promise<void> {
   const manifest: Manifest = {
-    generatedBy: '@clamator/codegen v0.1.0',
+    generatedBy: `@clamator/codegen v${VERSION}`,
     contracts: {},
   };
   for (const c of contracts) {
