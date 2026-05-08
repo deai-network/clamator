@@ -3,7 +3,6 @@ name = "clamator-protocol"
 version = "0.1.0"
 description = "Polyglot RPC protocol layer (pre-1.0; API may break in minor versions)."
 license = { text = "Apache-2.0" }
-readme = "../../../README.md"
 requires-python = ">=3.11"
 authors = [{ name = "Kristof Csillag" }]
 dependencies = ["pydantic>=2.5"]
@@ -20,7 +19,5 @@ packages = ["src/clamator_protocol"]
 include = ["LICENSE"]
 
 [tool.hatch.build.targets.sdist]
-include = ["src", "LICENSE", "README.md", "pyproject.toml"]
+include = ["src", "README.md", "pyproject.toml", "LICENSE"]
 
-[tool.hatch.build.force-include]
-"../../../LICENSE" = "LICENSE"

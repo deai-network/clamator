@@ -3,7 +3,6 @@ name = "clamator-over-memory"
 version = "0.1.0"
 description = "In-process loopback transport for clamator (pre-1.0)."
 license = { text = "Apache-2.0" }
-readme = "../../../README.md"
 requires-python = ">=3.11"
 authors = [{ name = "Kristof Csillag" }]
 dependencies = [
@@ -19,8 +18,9 @@ build-backend = "hatchling.build"
 packages = ["src/clamator_over_memory"]
 include = ["LICENSE"]
 
-[tool.hatch.build.force-include]
-"../../../LICENSE" = "LICENSE"
+[tool.hatch.build.targets.sdist]
+include = ["src", "README.md", "pyproject.toml", "LICENSE"]
+
 
 [tool.uv.sources]
 clamator-protocol = { workspace = true }
