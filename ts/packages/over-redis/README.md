@@ -74,6 +74,8 @@ export async function callArith(opts: { redis: IORedis; keyPrefix: string }) {
 
 (Verbatim from `ts/packages/over-redis/tests/client.ts:1-12`. In your own code, replace `../src/index.js` with `@clamator/over-redis`.)
 
+Call `await server.stop()` to shut down — drains in-flight handlers up to `graceMs` (default 5 s) before disconnecting.
+
 By default the connection is built from `$REDIS_URL` (or `redis://localhost:6379`). Pass `redisUrl` for a different URL, or `redis` for a pre-built `ioredis` instance.
 
 ## Key surface

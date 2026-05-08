@@ -70,6 +70,8 @@ export async function callArith(bus: MemoryBus) {
 
 (Verbatim from `ts/packages/over-memory/tests/client.ts:1-11`. In your own code, replace `../src/index.js` with `@clamator/over-memory`.)
 
+Call `await server.stop()` to shut down — since the loopback is in-process, the drain is instantaneous and the server unregisters from the bus without closing any external resource.
+
 `MemoryBus()` takes no arguments and is the only wiring needed.
 
 ## Key surface

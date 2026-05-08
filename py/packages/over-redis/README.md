@@ -64,6 +64,8 @@ async def call_arith(*, redis: Redis, key_prefix: str) -> AddResult:
 
 (Verbatim from `py/packages/over-redis/tests/client.py:1-13`.)
 
+Call `await server.stop()` to shut down — drains in-flight handlers up to `grace_ms` (default 5 s) before disconnecting.
+
 By default the connection is built from `$REDIS_URL` (or `redis://localhost:6379`). Pass `redis_url=` for a different URL, or `redis=` for a pre-built `redis.asyncio.Redis` instance.
 
 ## Key surface

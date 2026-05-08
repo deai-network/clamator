@@ -59,6 +59,8 @@ async def call_arith(bus: MemoryBus) -> AddResult:
 
 (Verbatim from `py/packages/over-memory/tests/client.py:1-12`.)
 
+Call `await server.stop()` to shut down — since the loopback is in-process, the drain is instantaneous and the server unregisters from the bus without closing any external resource.
+
 `MemoryBus()` takes no arguments and is the only wiring needed. The loopback is synchronous within a single asyncio task — no timeouts, retries, or stream parameters.
 
 ## Key surface
