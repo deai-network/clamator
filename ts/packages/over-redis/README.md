@@ -161,6 +161,10 @@ For multiple backends, construct one `RedisRpcClient` per `keyPrefix` and hold t
 
 Call `await client.stop()` on each client during application shutdown to drain the reply loop and `DEL` the reply-stream key.
 
+## Per-call timeout override
+
+Each generated proxy method accepts an optional opts object whose `timeoutMs` overrides the client's `defaultTimeoutMs` for that single call: `await arith.add({ a: 2, b: 3 }, { timeoutMs: 60_000 })`. When omitted, the client's `defaultTimeoutMs` applies. Notification proxy methods don't accept opts — they have no reply to wait for. The override is round-trip wall-time (xadd → handler → reply); cancellation and retry semantics are otherwise unchanged.
+
 ## Worker-pool semantics
 
 Multiple `RedisRpcServer` instances sharing the same `keyPrefix` form a competing-consumers pool: each call is processed by exactly one instance. They share a single Redis consumer group per service (named `<service>`); each server is a unique consumer (named `<service>:<instanceId>`). XREADGROUP delivers each request to exactly one server. A reclaim loop (`XAUTOCLAIM`) re-delivers messages unacknowledged for `consumerClaimIdleMs` (default 60,000 ms). Delivery semantics are at-least-once. To run a single-consumer scenario, run one server.

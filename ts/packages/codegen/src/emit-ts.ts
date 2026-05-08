@@ -37,13 +37,13 @@ function renderTsFile(c: IrContract, opts: EmitTsOptions): string {
     if (m.isNotification) {
       return `  ${m.name}(params: ${N}Params): Promise<void> {\n    return this.client.notify('${c.service}', '${m.name}', params);\n  }`;
     }
-    return `  ${m.name}(params: ${N}Params): Promise<${N}Result> {\n    return this.client.call('${c.service}', '${m.name}', params);\n  }`;
+    return `  ${m.name}(params: ${N}Params, opts?: { timeoutMs?: number }): Promise<${N}Result> {\n    return this.client.call('${c.service}', '${m.name}', params, opts);\n  }`;
   }).join('\n');
 
   const serviceMethods = c.methods.map(m => {
     const N = upperFirst(m.name);
     if (m.isNotification) return `  ${m.name}(params: ${N}Params): Promise<void>;`;
-    return `  ${m.name}(params: ${N}Params): Promise<${N}Result>;`;
+    return `  ${m.name}(params: ${N}Params, opts?: { timeoutMs?: number }): Promise<${N}Result>;`;
   }).join('\n');
 
   const importPath = opts.contractImportPath.replace(/\{service\}/g, c.service);

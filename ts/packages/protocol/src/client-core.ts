@@ -3,8 +3,13 @@ import type { Transport } from './transport.js';
 import { SERVICE_RE, METHOD_RE, parseEnvelope, EnvelopeKind, buildRequest, buildNotification } from './envelope.js';
 import { RpcError, ClamatorProtocolError } from './error.js';
 
+export interface CallOptions {
+  /** Override the client's default timeout for this single call (milliseconds). */
+  timeoutMs?: number;
+}
+
 export interface ClamatorClient {
-  call<P, R>(service: string, method: string, params: P): Promise<R>;
+  call<P, R>(service: string, method: string, params: P, opts?: CallOptions): Promise<R>;
   notify<P>(service: string, method: string, params: P): Promise<void>;
 }
 
@@ -20,12 +25,12 @@ export class RpcClientCore implements ClamatorClient {
     this.defaultTimeoutMs = opts.defaultTimeoutMs ?? 30_000;
   }
 
-  async call<P, R>(service: string, method: string, params: P): Promise<R> {
+  async call<P, R>(service: string, method: string, params: P, opts?: CallOptions): Promise<R> {
     if (!SERVICE_RE.test(service)) throw new Error(`invalid service "${service}"`);
     if (!METHOD_RE.test(method)) throw new Error(`invalid method "${method}"`);
     const id = randomUUID();
     const env = buildRequest(`${service}.${method}`, params, id);
-    const reply = await this.transport.send(env, { timeoutMs: this.defaultTimeoutMs });
+    const reply = await this.transport.send(env, { timeoutMs: opts?.timeoutMs ?? this.defaultTimeoutMs });
     let parsed;
     try { parsed = parseEnvelope(reply); }
     catch (e) { throw new ClamatorProtocolError(`invalid response envelope: ${(e as Error).message}`); }

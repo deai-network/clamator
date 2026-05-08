@@ -11,15 +11,15 @@ export type DivideResult = z.infer<typeof arithContract.methods.divide.result>;
 
 export class ArithClient {
   constructor(private client: ClamatorClient) {}
-  add(params: AddParams): Promise<AddResult> {
-    return this.client.call('arith', 'add', params);
+  add(params: AddParams, opts?: { timeoutMs?: number }): Promise<AddResult> {
+    return this.client.call('arith', 'add', params, opts);
   }
-  divide(params: DivideParams): Promise<DivideResult> {
-    return this.client.call('arith', 'divide', params);
+  divide(params: DivideParams, opts?: { timeoutMs?: number }): Promise<DivideResult> {
+    return this.client.call('arith', 'divide', params, opts);
   }
 }
 
 export interface ArithService {
-  add(params: AddParams): Promise<AddResult>;
-  divide(params: DivideParams): Promise<DivideResult>;
+  add(params: AddParams, opts?: { timeoutMs?: number }): Promise<AddResult>;
+  divide(params: DivideParams, opts?: { timeoutMs?: number }): Promise<DivideResult>;
 }

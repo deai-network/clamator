@@ -94,8 +94,8 @@ export type PingParams = z.infer<typeof arithContract.methods.ping.params>;
 
 export class ArithClient {
   constructor(private client: ClamatorClient) {}
-  add(params: AddParams): Promise<AddResult> {
-    return this.client.call('arith', 'add', params);
+  add(params: AddParams, opts?: { timeoutMs?: number }): Promise<AddResult> {
+    return this.client.call('arith', 'add', params, opts);
   }
   ping(params: PingParams): Promise<void> {
     return this.client.notify('arith', 'ping', params);
@@ -103,7 +103,7 @@ export class ArithClient {
 }
 
 export interface ArithService {
-  add(params: AddParams): Promise<AddResult>;
+  add(params: AddParams, opts?: { timeoutMs?: number }): Promise<AddResult>;
   ping(params: PingParams): Promise<void>;
 }
 ```
@@ -149,8 +149,8 @@ class ArithClient:
     def __init__(self, client: ClamatorClient) -> None:
         self._client = client
 
-    async def add(self, params: AddParams) -> AddResult:
-        raw = await self._client.call("arith", "add", params.model_dump(by_alias=True))
+    async def add(self, params: AddParams, *, timeout_ms: int | None = None) -> AddResult:
+        raw = await self._client.call("arith", "add", params.model_dump(by_alias=True), timeout_ms=timeout_ms)
         return AddResult.model_validate(raw)
 
     async def ping(self, params: PingParams) -> None:

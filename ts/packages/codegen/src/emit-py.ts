@@ -114,8 +114,8 @@ function renderPyTail(c: IrContract): string {
       return `    async def ${snake}(self, params: ${N}Params) -> None:
         await self._client.notify("${c.service}", "${m.name}", params.model_dump(by_alias=True))`;
     }
-    return `    async def ${snake}(self, params: ${N}Params) -> ${N}Result:
-        raw = await self._client.call("${c.service}", "${m.name}", params.model_dump(by_alias=True))
+    return `    async def ${snake}(self, params: ${N}Params, *, timeout_ms: int | None = None) -> ${N}Result:
+        raw = await self._client.call("${c.service}", "${m.name}", params.model_dump(by_alias=True), timeout_ms=timeout_ms)
         return ${N}Result.model_validate(raw)`;
   }).join('\n\n');
 
@@ -125,6 +125,7 @@ function renderPyTail(c: IrContract): string {
     if (m.isNotification) {
       return `    @abstractmethod\n    async def ${snake}(self, params: ${N}Params) -> None: ...`;
     }
+    // Server-side ABC: handlers don't see the timeout_ms (only the client proxy passes it).
     return `    @abstractmethod\n    async def ${snake}(self, params: ${N}Params) -> ${N}Result: ...`;
   }).join('\n\n');
 

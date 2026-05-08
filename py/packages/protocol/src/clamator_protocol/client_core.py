@@ -17,7 +17,14 @@ from .transport import Transport
 
 
 class ClamatorClient(Protocol):
-    async def call(self, service: str, method: str, params: Any) -> Any: ...
+    async def call(
+        self,
+        service: str,
+        method: str,
+        params: Any,
+        *,
+        timeout_ms: int | None = None,
+    ) -> Any: ...
     async def notify(self, service: str, method: str, params: Any) -> None: ...
 
 
@@ -27,14 +34,22 @@ class RpcClientCore:
         self._default_timeout = default_timeout_ms / 1000
         self._state = "idle"
 
-    async def call(self, service: str, method: str, params: Any) -> Any:
+    async def call(
+        self,
+        service: str,
+        method: str,
+        params: Any,
+        *,
+        timeout_ms: int | None = None,
+    ) -> Any:
         if not SERVICE_RE.match(service):
             raise ValueError(f"invalid service \"{service}\"")
         if not METHOD_RE.match(method):
             raise ValueError(f"invalid method \"{method}\"")
         rpc_id = str(uuid.uuid4())
         env = build_request(f"{service}.{method}", params, rpc_id)
-        reply = await self._transport.send(env, timeout=self._default_timeout)
+        timeout = (timeout_ms / 1000) if timeout_ms is not None else self._default_timeout
+        reply = await self._transport.send(env, timeout=timeout)
         try:
             parsed = parse_envelope(reply)
         except ValueError as e:
