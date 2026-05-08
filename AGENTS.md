@@ -80,11 +80,18 @@ When using subagents for search or research, monitor for "Tool result missing du
 
 ### Examples in code documentation must run
 
-Code examples in the README and docs that demonstrate API usage must either:
-1. Be checked by a typecheck-only fixture (or a runnable scenario) in `tests/interop/`, or
-2. Be a verbatim quote of a working example file in the repo.
+Code examples in the README and docs that demonstrate API usage must be verbatim quotes of working test or fixture code in the repo, **except for code comments — comments may be added freely in the README copy for documentation purposes.** A "comment" means any token sequence the source language treats as a comment: `#` lines and `# trailing` segments in Python, `//` lines and `// trailing` segments and `/* ... */` blocks in TypeScript, and so on. Whitespace around comments is similarly free.
 
-No "example-only" code that has never executed.
+**Update-coupling rule (test → README).** When updating a test or fixture that is quoted in a README, also update the README's quoted block so it remains verbatim. Comments that exist only in the README copy are preserved.
+
+**Update-coupling rule (README → test).** When updating demo code in a README, the code must originate from a working source file. Update the source file (test or fixture) first, then propagate the change to the README. Existing README-only comments are preserved across the propagation.
+
+**Comment placement guidance.**
+- Use end-of-line comments for short keyword annotations: `await server.start()  # must follow register_service`.
+- Use above-statement comments for full sentences. End-of-line full sentences are stranded when a variable rename forces a wrap.
+- Avoid mid-block standalone comment lines that depend on neighbor context (e.g., "the next line is critical because…"). They break silently when the next line moves.
+
+A `make check-readmes` target verifies every code block in every package README is verbatim (modulo comments) against its cited source.
 
 ### Test layering
 
