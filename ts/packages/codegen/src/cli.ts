@@ -1,4 +1,6 @@
 #!/usr/bin/env node
+import { realpathSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { Command } from 'commander';
 import { loadContracts } from './load.js';
 import { lowerContracts } from './lower.js';
@@ -62,7 +64,20 @@ program
     await runCli(cliOpts);
   });
 
-const isMain = import.meta.url === `file://${process.argv[1]}`;
-if (isMain) {
+// Compare real (symlink-resolved) paths so the guard works under pnpm's
+// hard-link virtual store, npm's regular symlinks, and direct `node dist/cli.js`
+// invocation. The naive `import.meta.url === \`file://${process.argv[1]}\``
+// guard fails on pnpm because the two paths are different strings even though
+// they resolve to the same inode.
+function isInvokedAsCli(): boolean {
+  if (!process.argv[1]) return false;
+  try {
+    return realpathSync(fileURLToPath(import.meta.url)) === realpathSync(process.argv[1]);
+  } catch {
+    return false;
+  }
+}
+
+if (isInvokedAsCli()) {
   program.parseAsync().catch(err => { console.error(err); process.exit(1); });
 }
