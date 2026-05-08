@@ -89,6 +89,36 @@ Per-client reply streams are bounded: the server XADDs replies with `MAXLEN ~ re
 - `RedisRpcServer({ keyPrefix, redis?, redisUrl?, ... })` — `registerService(contract, handlers)`, `start()`, `stop()`.
 - `RedisRpcClient({ keyPrefix, redis?, redisUrl?, defaultTimeoutMs? })` — `start()`, `stop()`. The instance is also a `ClamatorClient`, so it can be wrapped by a generated `*Client` proxy.
 
+## Client lifetime and fan-out
+
+`RedisRpcClient` and `RedisRpcServer` are stateful: each spawns a background reply/consumer loop, calls `redis.duplicate()` for a dedicated blocking connection, and (`RedisRpcClient`) maintains a per-instance reply-stream key in Redis. Construct once and keep alive for the application's lifetime — do not construct/destroy per call.
+
+A `keyPrefix` identifies a backend, not a service. One `RedisRpcClient` can back many service proxies — wrap it with each generated `*Client`:
+
+```typescript
+import { RedisRpcClient } from '../src/index.js';
+import { ArithClient } from './generated/arith.js';
+import { LoggerClient } from './generated/logger.js';
+
+// One keyPrefix-pinned RedisRpcClient backs many service proxies.
+export async function callMultipleServices(keyPrefix: string) {
+  const client = new RedisRpcClient({ keyPrefix });
+  await client.start();
+  const arith = new ArithClient(client);
+  const logger = new LoggerClient(client);
+  const sum = await arith.add({ a: 2, b: 3 });
+  await logger.log({ msg: `sum=${sum.sum}` });
+  await client.stop();
+  return sum;
+}
+```
+
+(Verbatim from `ts/packages/over-redis/tests/multi-service.example.ts:1-15`. In your own code, replace `../src/index.js` with `@clamator/over-redis`.)
+
+For multiple backends, construct one `RedisRpcClient` per `keyPrefix` and hold them in named variables. The same injected `redis` instance can back every client, so the marginal cost of an additional `keyPrefix` is one background task + one duplicated TCP connection + one reply-stream key in Redis.
+
+Call `await client.stop()` on each client during application shutdown to drain the reply loop and `DEL` the reply-stream key.
+
 ## Worker-pool semantics
 
 Multiple `RedisRpcServer` instances sharing the same `keyPrefix` form a competing-consumers pool: each call is processed by exactly one instance. They share a single Redis consumer group per service (named `<service>`); each server is a unique consumer (named `<service>:<instanceId>`). XREADGROUP delivers each request to exactly one server. A reclaim loop (`XAUTOCLAIM`) re-delivers messages unacknowledged for `consumerClaimIdleMs` (default 60,000 ms). Delivery semantics are at-least-once. To run a single-consumer scenario, run one server.

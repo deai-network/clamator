@@ -79,6 +79,37 @@ Per-client reply streams are bounded: the server XADDs replies with `maxlen=repl
 - `RedisRpcServer(*, key_prefix, redis=None, redis_url=None, ...)` — `register_service(contract, handler_obj)`, `start()`, `stop()`.
 - `RedisRpcClient(*, key_prefix, redis=None, redis_url=None, default_timeout_ms=30_000)` — `start()`, `stop()`. The instance is a `ClamatorClient`, so it can be wrapped by a generated `*Client` proxy.
 
+## Client lifetime and fan-out
+
+`RedisRpcClient` and `RedisRpcServer` are stateful: each spawns a background reply/consumer loop and (`RedisRpcClient`) maintains a per-instance reply-stream key in Redis. Construct once and keep alive for the application's lifetime — do not construct/destroy per call.
+
+A `key_prefix` identifies a backend, not a service. One `RedisRpcClient` can back many service proxies — wrap it with each generated `*Client`:
+
+```python
+from clamator_over_redis import RedisRpcClient
+
+from .generated.arith import AddParams, AddResult, ArithClient
+from .generated.logger import LoggerClient, LogParams
+
+
+# One key_prefix-pinned RedisRpcClient backs many service proxies.
+async def call_multiple_services(key_prefix: str) -> AddResult:
+    client = RedisRpcClient(key_prefix=key_prefix)
+    await client.start()
+    arith = ArithClient(client)
+    logger = LoggerClient(client)
+    r = await arith.add(AddParams(a=2, b=3))
+    await logger.log(LogParams(msg=f"sum={r.sum}"))
+    await client.stop()
+    return r
+```
+
+(Verbatim from `py/packages/over-redis/tests/multi_service_example.py:1-16`.)
+
+For multiple backends, construct one `RedisRpcClient` per `key_prefix` and hold them in named variables. The same injected `redis` instance can back every client, so the marginal cost of an additional `key_prefix` is one background task + one reply-stream key in Redis.
+
+Call `await client.stop()` on each client during application shutdown to drain the reply loop and delete the reply-stream key.
+
 ## Worker-pool semantics
 
 Multiple `RedisRpcServer` instances sharing the same `key_prefix` form a competing-consumers pool: each call is processed by exactly one instance. They share a single Redis consumer group per service (named `<service>`); each server is a unique consumer (named `<service>:<instance_id>`). XREADGROUP delivers each request to exactly one server. A reclaim loop (`XAUTOCLAIM`) re-delivers messages unacknowledged for `consumer_claim_idle_ms` (default 60,000 ms). Delivery semantics are at-least-once. To run a single-consumer scenario, run one server.
