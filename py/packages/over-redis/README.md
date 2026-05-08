@@ -16,19 +16,15 @@ Contracts are authored in TypeScript and the Python sibling is produced by [`@cl
 npx @clamator/codegen --src contracts --out-py generated
 ```
 
-The emitted `generated/arith.py` exports Pydantic models, a typed `ArithClient`, an `ArithService` ABC, and the `arith_contract` `Contract` object.
+The emitted `generated/arith.py` exports Pydantic models, a typed `ArithClient`, an `ArithService` ABC, and the `arith_contract` `Contract` object. Wire server and client through Redis, talk via `ArithClient`.
 
-Server — subclass the generated `ArithService` ABC:
+Server-side — register handlers and start:
 
 ```python
-# server.py
-import asyncio
-
 from clamator_over_redis import RedisRpcServer
+from redis.asyncio import Redis
 
-from generated.arith import (
-    AddParams, AddResult, PingParams, ArithService, arith_contract,
-)
+from .generated.arith import AddParams, AddResult, ArithService, PingParams, arith_contract
 
 
 class Arith(ArithService):
@@ -36,45 +32,39 @@ class Arith(ArithService):
         return AddResult(sum=params.a + params.b)
 
     async def ping(self, params: PingParams) -> None:
-        pass
+        return None
 
 
-async def main() -> None:
-    server = RedisRpcServer(key_prefix="my-app")
-    server.register_service(arith_contract, Arith())
+async def build_arith_server(*, redis: Redis, key_prefix: str) -> RedisRpcServer:
+    server = RedisRpcServer(redis=redis, key_prefix=key_prefix)  # injected redis= not closed by stop() — caller owns lifecycle; omit to let transport own it  # noqa: E501
+    server.register_service(arith_contract, Arith())  # must precede start() — post-start registrations are silently ignored, no consumer group or read loop is created  # noqa: E501
     await server.start()
-    await asyncio.Event().wait()  # serve until cancelled
-
-
-if __name__ == "__main__":
-    asyncio.run(main())
+    return server
 ```
 
-Client — call methods on the generated `ArithClient`:
+(Verbatim from `py/packages/over-redis/tests/server.py:1-19`.)
+
+Client-side — call the typed proxy:
 
 ```python
-# client.py
-import asyncio
-
 from clamator_over_redis import RedisRpcClient
+from redis.asyncio import Redis
 
-from generated.arith import ArithClient, AddParams
-
-
-async def main() -> None:
-    transport = RedisRpcClient(key_prefix="my-app")
-    await transport.start()
-
-    arith = ArithClient(transport)
-    result = await arith.add(AddParams(a=2, b=3))
-    print(result)  # AddResult(sum=5)
-
-    await transport.stop()
+from .generated.arith import AddParams, AddResult, ArithClient
 
 
-if __name__ == "__main__":
-    asyncio.run(main())
+async def call_arith(*, redis: Redis, key_prefix: str) -> AddResult:
+    client = RedisRpcClient(redis=redis, key_prefix=key_prefix, default_timeout_ms=3000)  # default timeout 30 s; no auto-retry on disconnect; timeouts not propagated to server  # noqa: E501
+    await client.start()
+    arith = ArithClient(client)
+    r = await arith.add(AddParams(a=2, b=3))
+    await client.stop()
+    return r
 ```
+
+(Verbatim from `py/packages/over-redis/tests/client.py:1-13`.)
+
+Call `await server.stop()` to shut down — drains in-flight handlers up to `grace_ms` (default 5 s) before disconnecting.
 
 By default the connection is built from `$REDIS_URL` (or `redis://localhost:6379`). Pass `redis_url=` for a different URL, or `redis=` for a pre-built `redis.asyncio.Redis` instance.
 
@@ -82,6 +72,18 @@ By default the connection is built from `$REDIS_URL` (or `redis://localhost:6379
 
 - `RedisRpcServer(*, key_prefix, redis=None, redis_url=None, ...)` — `register_service(contract, handler_obj)`, `start()`, `stop()`.
 - `RedisRpcClient(*, key_prefix, redis=None, redis_url=None, default_timeout_ms=30_000)` — `start()`, `stop()`. The instance is a `ClamatorClient`, so it can be wrapped by a generated `*Client` proxy.
+
+## Worker-pool semantics
+
+Multiple `RedisRpcServer` instances sharing the same `key_prefix` form a competing-consumers pool: each call is processed by exactly one instance. They share a single Redis consumer group per service (named `<service>`); each server is a unique consumer (named `<service>:<instance_id>`). XREADGROUP delivers each request to exactly one server. A reclaim loop (`XAUTOCLAIM`) re-delivers messages unacknowledged for `consumer_claim_idle_ms` (default 60,000 ms). Delivery semantics are at-least-once. To run a single-consumer scenario, run one server.
+
+## Keys owned under `key_prefix`
+
+| Pattern | Type | Purpose |
+|---|---|---|
+| `<key_prefix>:cmds:<service>` | stream | inbound command stream per service; servers consume via XREADGROUP, clients write via XADD |
+| `<key_prefix>:replies:<instance_id>` | stream | per-client reply stream; servers write replies via XADD, the client reads via XREAD; deleted by client `stop()` |
+| `<service>` | consumer group | competing-consumers pool name (lives inside the cmds stream's metadata; not a top-level key) |
 
 ## When to reach for this vs. `clamator-over-memory`
 

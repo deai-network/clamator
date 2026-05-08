@@ -13,7 +13,6 @@ npm install @clamator/over-memory @clamator/protocol
 Define the contract:
 
 ```typescript
-// contracts/arith.ts
 import { z } from 'zod';
 import { defineContract, defineMethod } from '@clamator/protocol';
 
@@ -25,46 +24,73 @@ export const arithContract = defineContract('arith', {
 });
 ```
 
+(Verbatim from `ts/packages/over-memory/tests/contracts/arith.ts:1-9`.)
+
 Generate the typed proxies:
 
 ```bash
 npx @clamator/codegen --src contracts --out-ts generated --ts-contract-import '../contracts/arith.js'
 ```
 
-Wire server and client through a shared bus, talk via `ArithClient`:
+Server-side — register handlers and start:
 
 ```typescript
-// loopback.ts
-import { MemoryBus, MemoryRpcServer, MemoryRpcClient } from '@clamator/over-memory';
+import { MemoryBus, MemoryRpcServer } from '../src/index.js';
 import { arithContract } from './contracts/arith.js';
-import { ArithClient, type ArithService } from './generated/arith.js';
+import type { ArithService } from './generated/arith.js';
 
-const handlers: ArithService = {
-  add: async ({ a, b }) => ({ sum: a + b }),
-};
-
-const bus = new MemoryBus();
-const server = new MemoryRpcServer({ bus });
-server.registerService(arithContract, handlers);
-await server.start();
-
-const transport = new MemoryRpcClient({ bus });
-await transport.start();
-
-const arith = new ArithClient(transport);
-console.log(await arith.add({ a: 2, b: 3 })); // { sum: 5 }
-
-await transport.stop();
-await server.stop();
+export async function buildArithServer(bus: MemoryBus) {
+  const server = new MemoryRpcServer({ bus }); // no external connection; stop() unregisters from the bus without closing any resource
+  const handlers: ArithService = {
+    add: async ({ a, b }) => ({ sum: a + b }),
+  };
+  server.registerService(arithContract, handlers); // must precede start() — post-start registrations are silently ignored, never registered on the bus
+  await server.start();
+  return server;
+}
 ```
 
-`MemoryBus()` takes no arguments and is the only wiring needed. The loopback is synchronous within a single event loop turn — no timeouts, retries, or stream parameters.
+(Verbatim from `ts/packages/over-memory/tests/server.ts:1-13`. In your own code, replace `../src/index.js` with `@clamator/over-memory`.)
+
+Client-side — call the typed proxy:
+
+```typescript
+import { MemoryBus, MemoryRpcClient } from '../src/index.js';
+import { ArithClient } from './generated/arith.js';
+
+export async function callArith(bus: MemoryBus) {
+  const client = new MemoryRpcClient({ bus }); // default timeout 30 s (pass defaultTimeoutMs to override); no retry; timeouts not propagated to server
+  await client.start();
+  const arith = new ArithClient(client);
+  const r = await arith.add({ a: 2, b: 3 });
+  await client.stop();
+  return r;
+}
+```
+
+(Verbatim from `ts/packages/over-memory/tests/client.ts:1-11`. In your own code, replace `../src/index.js` with `@clamator/over-memory`.)
+
+Call `await server.stop()` to shut down — since the loopback is in-process, the drain is instantaneous and the server unregisters from the bus without closing any external resource.
+
+`MemoryBus()` takes no arguments and is the only wiring needed.
 
 ## Key surface
 
 - `MemoryBus` — constructor: `new MemoryBus()`. The connecting object passed to both server and client.
 - `MemoryRpcServer({ bus })` — `registerService(contract, handlers)`, `start()`, `stop()`.
 - `MemoryRpcClient({ bus })` — `start()`, `stop()`. Wrap with a generated `*Client` proxy for typed calls.
+
+## Worker-pool semantics
+
+N/A — this transport is a single-process loopback. Multiple `MemoryRpcServer` instances on the same `MemoryBus` do not form a competing-consumers pool because there is no shared substrate; each bus is in-memory to its constructing process. For cross-process worker-pool behavior, use `@clamator/over-redis`.
+
+## Owned external state
+
+N/A — `MemoryBus` owns no external state. There are no Redis keys, no streams, no files, no sockets. The bus is garbage-collected with the process.
+
+## Connection ownership
+
+N/A — there is no external connection to own. `MemoryRpcServer` and `MemoryRpcClient` share a `MemoryBus` that lives entirely in-process; `stop()` releases its references without closing any external resource.
 
 ## When to reach for this vs. `@clamator/over-redis`
 
