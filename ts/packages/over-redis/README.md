@@ -68,17 +68,20 @@ describe.skipIf(!REDIS_URL)('redis round-trip', () => {
 - `keyPrefix` — string prefix for the request and response stream keys (e.g., `"my-service"`). Both sides must agree.
 - `instanceId` (optional) — unique id of this server instance; defaults to a random suffix. Used for redelivery / claim semantics.
 - `consumerClaimIdleMs` (optional) — milliseconds before a pending message becomes eligible for claim by another consumer; tune for your workload.
+- `replyStreamMaxLen` (optional) — bound on the per-service reply stream length (Redis `MAXLEN`); defaults to 1024.
+- `shutdownGraceMs` (optional) — grace period in milliseconds for in-flight work to complete during `stop()`.
 
 `RedisRpcClient` constructor options:
 
 - `redis` — an `ioredis` `IORedis` instance, dedicated to this client.
 - `keyPrefix` — same prefix the server uses.
+- `instanceId` (optional) — unique id of this client instance; defaults to a random UUID. Used to scope reply streams.
 - `defaultTimeoutMs` (optional) — default timeout per call when the caller does not specify one.
 
 ## Key surface
 
-- `RedisRpcServer({ redis, keyPrefix, instanceId?, consumerClaimIdleMs? })` — `registerService(contract, handlers)`, `start()`, `stop()`.
-- `RedisRpcClient({ redis, keyPrefix, defaultTimeoutMs? })` — `start()`, `stop()`, `call<P, R>(service, method, params, opts?)`, `notify(service, method, params)`.
+- `RedisRpcServer({ redis, keyPrefix, instanceId?, consumerClaimIdleMs?, replyStreamMaxLen?, shutdownGraceMs? })` — `registerService(contract, handlers)`, `start()`, `stop()`.
+- `RedisRpcClient({ redis, keyPrefix, instanceId?, defaultTimeoutMs? })` — `start()`, `stop()`, `call<P, R>(service, method, params, opts?)`, `notify(service, method, params)`.
 
 ## When to reach for this vs. `@clamator/over-memory`
 
