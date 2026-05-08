@@ -1,8 +1,12 @@
 # clamator
 
+![clamator](https://raw.githubusercontent.com/deai-network/clamator/main/images/splash.png)
+
 [![TS](https://github.com/csillag/clamator/actions/workflows/ts.yml/badge.svg)](https://github.com/csillag/clamator/actions/workflows/ts.yml)
 [![Py](https://github.com/csillag/clamator/actions/workflows/py.yml/badge.svg)](https://github.com/csillag/clamator/actions/workflows/py.yml)
 [![Interop](https://github.com/csillag/clamator/actions/workflows/interop.yml/badge.svg)](https://github.com/csillag/clamator/actions/workflows/interop.yml)
+
+*clamator* is Latin for "shouter" or "crier" (from *clamare*, "to call") — same root as *claim*, *clamor*, *exclaim*. RPC is, after all, the business of calling.
 
 Polyglot TS↔Py RPC over pluggable transports. JSON-RPC 2.0 envelopes; Zod as contract source of truth; codegen for Python.
 
