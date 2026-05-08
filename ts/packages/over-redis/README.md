@@ -5,8 +5,10 @@ Redis-streams transport for [clamator](https://www.npmjs.com/package/@clamator/p
 ## Install
 
 ```bash
-npm install @clamator/over-redis @clamator/protocol ioredis
+npm install @clamator/over-redis @clamator/protocol ioredis zod
 ```
+
+`zod` is a peer dependency that you must declare in your own `package.json` for type-dedupe — see the [`@clamator/protocol`](https://www.npmjs.com/package/@clamator/protocol) README's install section for the rationale.
 
 ## Quickstart
 

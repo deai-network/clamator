@@ -6,7 +6,10 @@ CLI plus library that turns a Zod contract module into TypeScript and Python cli
 
 ```bash
 npm install -D @clamator/codegen
+npm install zod @clamator/protocol
 ```
+
+`@clamator/protocol` and `zod` are peer dependencies — codegen reads your contract source files, which import `defineContract`/`defineMethod`/`defineNotification` from `@clamator/protocol` and type-parameterize over `zod`. See the [`@clamator/protocol`](https://www.npmjs.com/package/@clamator/protocol) README's install section for the type-dedupe rationale.
 
 ## CLI usage
 

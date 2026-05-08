@@ -5,8 +5,10 @@ In-process loopback transport for [clamator](https://www.npmjs.com/package/@clam
 ## Install
 
 ```bash
-npm install @clamator/over-memory @clamator/protocol
+npm install @clamator/over-memory @clamator/protocol zod
 ```
+
+`zod` is a peer dependency that you must declare in your own `package.json` for type-dedupe — see the [`@clamator/protocol`](https://www.npmjs.com/package/@clamator/protocol) README's install section for the rationale.
 
 ## Quickstart
 
