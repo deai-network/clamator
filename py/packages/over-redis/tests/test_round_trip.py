@@ -1,7 +1,7 @@
 import pytest
 from pydantic import BaseModel
 from redis.asyncio import Redis
-from clamator_protocol import Contract, MethodEntry, RpcError
+from clamator_protocol import ClamatorTransportError, Contract, MethodEntry, RpcError
 from clamator_over_redis import RedisRpcServer, RedisRpcClient
 
 
@@ -46,6 +46,29 @@ async def test_round_trip(redis_url, key_prefix, cleanup):
     await server.stop()
     await rs.aclose()
     await rc.aclose()
+
+
+async def test_round_trip_redis_url(redis_url, key_prefix, cleanup):
+    server = RedisRpcServer(redis_url=redis_url, key_prefix=key_prefix)
+    server.register_service(arith, Svc())
+    await server.start()
+    client = RedisRpcClient(redis_url=redis_url, key_prefix=key_prefix, default_timeout_ms=3000)
+    await client.start()
+    r = await client.call("arith", "add", {"a": 4, "b": 5})
+    assert r == {"sum": 9}
+    await client.stop()
+    await server.stop()
+
+
+async def test_rejects_both_redis_and_redis_url(redis_url):
+    r = Redis.from_url(redis_url)
+    try:
+        with pytest.raises(ClamatorTransportError):
+            RedisRpcServer(redis=r, redis_url=redis_url, key_prefix="x")
+        with pytest.raises(ClamatorTransportError):
+            RedisRpcClient(redis=r, redis_url=redis_url, key_prefix="x")
+    finally:
+        await r.aclose()
 
 
 async def test_handler_rpc_error(redis_url, key_prefix, cleanup):

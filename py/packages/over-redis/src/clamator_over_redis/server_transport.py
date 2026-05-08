@@ -1,6 +1,7 @@
 from __future__ import annotations
 import asyncio
 import json
+import os
 import uuid
 from typing import Any
 
@@ -14,13 +15,22 @@ from .keys import command_stream, consumer_group_name, consumer_name
 
 class ServerRedisTransport:
     def __init__(
-        self, *, redis: Redis, key_prefix: str,
+        self, *, redis: Redis | None = None, redis_url: str | None = None,
+        key_prefix: str,
         instance_id: str | None = None,
         consumer_claim_idle_ms: int = 60_000,
         reply_stream_maxlen: int = 1024,
         shutdown_grace_ms: int = 5_000,
     ) -> None:
-        self._redis = redis
+        if redis is not None and redis_url is not None:
+            raise ClamatorTransportError("provide either `redis` or `redis_url`, not both")
+        if redis is not None:
+            self._redis = redis
+            self._owns_redis = False
+        else:
+            url = redis_url or os.environ.get("REDIS_URL") or "redis://localhost:6379"
+            self._redis = Redis.from_url(url)
+            self._owns_redis = True
         self._key_prefix = key_prefix
         self.instance_id = instance_id or str(uuid.uuid4())
         self._claim_idle_ms = consumer_claim_idle_ms
@@ -71,6 +81,11 @@ class ServerRedisTransport:
         except asyncio.TimeoutError:
             pass
         self._tasks.clear()
+        if self._owns_redis:
+            try:
+                await self._redis.aclose()
+            except Exception:
+                pass
 
     async def _consumer_loop(self, service: str) -> None:
         stream = command_stream(self._key_prefix, service)

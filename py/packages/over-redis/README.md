@@ -10,12 +10,12 @@ pip install clamator-over-redis clamator-protocol redis
 
 ## Quickstart
 
+Define the contract once and import it from both the server and the client:
+
 ```python
-import pytest
+# arith_contract.py
 from pydantic import BaseModel
-from redis.asyncio import Redis
-from clamator_protocol import Contract, MethodEntry, RpcError
-from clamator_over_redis import RedisRpcServer, RedisRpcClient
+from clamator_protocol import Contract, MethodEntry
 
 
 class AddP(BaseModel):
@@ -38,53 +38,65 @@ arith = Contract(
         "ping": MethodEntry(params_model=PingP, result_model=None, handler_attr="ping"),
     },
 )
-
-
-class Svc:
-    async def add(self, p): return AddR(sum=p.a + p.b)
-    async def ping(self, p): pass
-
-
-async def test_round_trip(redis_url, key_prefix, cleanup):
-    rs = Redis.from_url(redis_url)
-    rc = Redis.from_url(redis_url)
-    server = RedisRpcServer(redis=rs, key_prefix=key_prefix)
-    server.register_service(arith, Svc())
-    await server.start()
-    client = RedisRpcClient(redis=rc, key_prefix=key_prefix, default_timeout_ms=3000)
-    await client.start()
-    r = await client.call("arith", "add", {"a": 2, "b": 3})
-    assert r == {"sum": 5}
-    await client.stop()
-    await server.stop()
-    await rs.aclose()
-    await rc.aclose()
 ```
 
-(Verbatim from `py/packages/over-redis/tests/test_round_trip.py:1-48`.)
+Server:
 
-## Configuration
+```python
+# server.py
+import asyncio
 
-`RedisRpcServer` keyword arguments:
+from clamator_over_redis import RedisRpcServer
 
-- `redis` — a `redis.asyncio.Redis` instance, dedicated to this server.
-- `key_prefix` — string prefix for the request and response stream keys. Both sides must agree.
-- `instance_id` (optional) — unique id of this server instance; defaults to a random UUID. Used for redelivery / claim semantics.
-- `consumer_claim_idle_ms` (optional) — milliseconds before a pending message becomes eligible for claim by another consumer; defaults to 60000.
-- `reply_stream_maxlen` (optional) — bound on the per-service reply stream length (Redis `MAXLEN`); defaults to 1024.
-- `shutdown_grace_ms` (optional) — grace period in milliseconds for in-flight work to complete during `stop()`; defaults to 5000.
+from arith_contract import AddP, AddR, PingP, arith
 
-`RedisRpcClient` keyword arguments:
 
-- `redis` — a `redis.asyncio.Redis` instance, dedicated to this client.
-- `key_prefix` — same prefix the server uses.
-- `instance_id` (optional) — unique id of this client instance; defaults to a random UUID. Used to scope reply streams.
-- `default_timeout_ms` (optional) — default timeout per call when the caller does not specify one; defaults to 30000.
+class ArithService:
+    async def add(self, p: AddP) -> AddR:
+        return AddR(sum=p.a + p.b)
+
+    async def ping(self, p: PingP) -> None:
+        pass
+
+
+async def main() -> None:
+    server = RedisRpcServer(key_prefix="my-app")
+    server.register_service(arith, ArithService())
+    await server.start()
+    await asyncio.Event().wait()  # serve until cancelled
+
+
+if __name__ == "__main__":
+    asyncio.run(main())
+```
+
+Client:
+
+```python
+# client.py
+import asyncio
+
+from clamator_over_redis import RedisRpcClient
+
+
+async def main() -> None:
+    client = RedisRpcClient(key_prefix="my-app")
+    await client.start()
+    result = await client.call("arith", "add", {"a": 2, "b": 3})
+    print(result)  # {"sum": 5}
+    await client.stop()
+
+
+if __name__ == "__main__":
+    asyncio.run(main())
+```
+
+By default the connection is built from `$REDIS_URL` (or `redis://localhost:6379`). Pass `redis_url=` for a different URL, or `redis=` for a pre-built `redis.asyncio.Redis` instance.
 
 ## Key surface
 
-- `RedisRpcServer(*, redis, key_prefix, instance_id=None, consumer_claim_idle_ms=60_000, reply_stream_maxlen=1024, shutdown_grace_ms=5_000)` — `register_service(contract, handler_obj)`, `start()`, `stop()`.
-- `RedisRpcClient(*, redis, key_prefix, instance_id=None, default_timeout_ms=30_000)` — `start()`, `stop()`, `call(service, method, params, *, timeout_ms=None)`, `notify(service, method, params)`.
+- `RedisRpcServer(*, key_prefix, redis=None, redis_url=None, ...)` — `register_service(contract, handler_obj)`, `start()`, `stop()`.
+- `RedisRpcClient(*, key_prefix, redis=None, redis_url=None, default_timeout_ms=30_000)` — `start()`, `stop()`, `call(service, method, params, *, timeout_ms=None)`, `notify(service, method, params)`.
 
 ## When to reach for this vs. `clamator-over-memory`
 

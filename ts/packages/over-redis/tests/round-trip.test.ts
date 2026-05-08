@@ -44,6 +44,28 @@ describe.skipIf(!REDIS_URL)('redis round-trip', () => {
     await sredis.quit(); await credis.quit();
   });
 
+  it('round-trips when constructed from a redis URL (lib owns the connection)', async () => {
+    prefix = `clam-test-${Math.random().toString(36).slice(2, 8)}`;
+    const server = new RedisRpcServer({ redisUrl: REDIS_URL!, keyPrefix: prefix });
+    server.registerService(arith, { add: async ({ a, b }) => ({ sum: a + b }), ping: async () => {} });
+    await server.start();
+    const client = new RedisRpcClient({ redisUrl: REDIS_URL!, keyPrefix: prefix, defaultTimeoutMs: 3000 });
+    await client.start();
+    const r = await client.call<{ a: number; b: number }, { sum: number }>('arith', 'add', { a: 4, b: 5 });
+    expect(r).toEqual({ sum: 9 });
+    await client.stop(); await server.stop();
+  });
+
+  it('rejects construction when both redis and redisUrl are provided', () => {
+    const r = new IORedis(REDIS_URL!);
+    try {
+      expect(() => new RedisRpcServer({ redis: r, redisUrl: REDIS_URL!, keyPrefix: 'x' })).toThrow();
+      expect(() => new RedisRpcClient({ redis: r, redisUrl: REDIS_URL!, keyPrefix: 'x' })).toThrow();
+    } finally {
+      void r.quit();
+    }
+  });
+
   it('returns RpcError on handler throw', async () => {
     prefix = `clam-test-${Math.random().toString(36).slice(2, 8)}`;
     const sredis = new IORedis(REDIS_URL!);

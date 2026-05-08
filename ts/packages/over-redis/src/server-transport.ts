@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import type { Redis } from 'ioredis';
+import IORedis, { type Redis } from 'ioredis';
 import {
   parseEnvelope, EnvelopeKind, ClamatorTransportError,
   type Transport, type Dispatcher, type SendOptions,
@@ -7,7 +7,10 @@ import {
 import { commandStream, consumerGroupName, consumerName } from './keys.js';
 
 export interface ServerTransportOptions {
-  redis: Redis;
+  /** Existing ioredis instance. Mutually exclusive with `redisUrl`. */
+  redis?: Redis;
+  /** Redis URL. If neither `redis` nor `redisUrl` is provided, falls back to `process.env.REDIS_URL` then `redis://localhost:6379`. */
+  redisUrl?: string;
   keyPrefix: string;
   instanceId?: string;
   consumerClaimIdleMs?: number;
@@ -27,11 +30,29 @@ export class ServerRedisTransport implements Transport {
   // queued behind the blocking read.
   private blockingConns: Redis[] = [];
 
+  private readonly redis: Redis;
+  private readonly ownsRedis: boolean;
+  private readonly keyPrefix: string;
   private readonly replyStreamMaxLen: number;
+  private readonly consumerClaimIdleMs: number;
+  private readonly shutdownGraceMs: number;
 
-  constructor(private readonly opts: ServerTransportOptions) {
+  constructor(opts: ServerTransportOptions) {
+    if (opts.redis && opts.redisUrl)
+      throw new ClamatorTransportError('provide either `redis` or `redisUrl`, not both');
+    if (opts.redis) {
+      this.redis = opts.redis;
+      this.ownsRedis = false;
+    } else {
+      const url = opts.redisUrl ?? process.env.REDIS_URL ?? 'redis://localhost:6379';
+      this.redis = new IORedis(url);
+      this.ownsRedis = true;
+    }
+    this.keyPrefix = opts.keyPrefix;
     this.instanceId = opts.instanceId ?? randomUUID();
     this.replyStreamMaxLen = opts.replyStreamMaxLen ?? 1024;
+    this.consumerClaimIdleMs = opts.consumerClaimIdleMs ?? 60_000;
+    this.shutdownGraceMs = opts.shutdownGraceMs ?? 5_000;
   }
 
   async registerService(name: string, dispatch: Dispatcher): Promise<void> {
@@ -52,17 +73,17 @@ export class ServerRedisTransport implements Transport {
     this.state = 'started';
     this.abort = false;
     for (const service of this.dispatchers.keys()) {
-      const stream = commandStream(this.opts.keyPrefix, service);
+      const stream = commandStream(this.keyPrefix, service);
       const group = consumerGroupName(service);
       try {
-        await this.opts.redis.xgroup('CREATE', stream, group, '$', 'MKSTREAM');
+        await this.redis.xgroup('CREATE', stream, group, '$', 'MKSTREAM');
       } catch (e) {
         const msg = (e as Error).message;
         if (!msg.includes('BUSYGROUP')) throw e;
       }
       // Dedicated connection for blocking XREADGROUP so the main connection
       // stays free for non-blocking operations (xadd, xack, xautoclaim).
-      const blockingRedis = this.opts.redis.duplicate();
+      const blockingRedis = this.redis.duplicate();
       this.blockingConns.push(blockingRedis);
       this.loops.push(this.runConsumerLoop(service, blockingRedis));
       this.loops.push(this.runReclaimLoop(service));
@@ -79,7 +100,7 @@ export class ServerRedisTransport implements Transport {
     for (const conn of this.blockingConns) {
       try { conn.disconnect(); } catch { /* ignore */ }
     }
-    const grace = this.opts.shutdownGraceMs ?? 5000;
+    const grace = this.shutdownGraceMs;
     await Promise.race([
       Promise.allSettled(this.loops),
       new Promise(r => setTimeout(r, grace)),
@@ -89,11 +110,14 @@ export class ServerRedisTransport implements Transport {
       try { await conn.quit(); } catch { /* best effort */ }
     }
     this.blockingConns = [];
+    if (this.ownsRedis) {
+      try { await this.redis.quit(); } catch { /* best effort */ }
+    }
     this.state = 'stopped';
   }
 
   private async runConsumerLoop(service: string, blockingRedis: Redis): Promise<void> {
-    const stream = commandStream(this.opts.keyPrefix, service);
+    const stream = commandStream(this.keyPrefix, service);
     const group = consumerGroupName(service);
     const consumer = consumerName(service, this.instanceId);
     while (!this.abort) {
@@ -124,15 +148,15 @@ export class ServerRedisTransport implements Transport {
   }
 
   private async runReclaimLoop(service: string): Promise<void> {
-    const stream = commandStream(this.opts.keyPrefix, service);
+    const stream = commandStream(this.keyPrefix, service);
     const group = consumerGroupName(service);
     const consumer = consumerName(service, this.instanceId);
-    const idleThreshold = this.opts.consumerClaimIdleMs ?? 60_000;
+    const idleThreshold = this.consumerClaimIdleMs;
     while (!this.abort) {
       try {
         await this.interruptibleSleep(Math.max(1000, idleThreshold / 4));
         if (this.abort) return;
-        const claimed = await this.opts.redis.xautoclaim(
+        const claimed = await this.redis.xautoclaim(
           stream, group, consumer, idleThreshold, '0', 'COUNT', 32,
         ) as [string, [string, string[]][], string[]];
         const entries = claimed[1];
@@ -152,27 +176,27 @@ export class ServerRedisTransport implements Transport {
   ): Promise<void> {
     const envIdx = fields.indexOf('envelope');
     if (envIdx < 0) {
-      await this.opts.redis.xack(stream, group, entryId);
+      await this.redis.xack(stream, group, entryId);
       return;
     }
     const replyToIdx = fields.indexOf('reply-to');
     const replyTo = replyToIdx >= 0 ? fields[replyToIdx + 1] : null;
     let envObj: Record<string, unknown>;
     try { envObj = JSON.parse(fields[envIdx + 1] ?? '') as Record<string, unknown>; }
-    catch { await this.opts.redis.xack(stream, group, entryId); return; }
+    catch { await this.redis.xack(stream, group, entryId); return; }
     let parsed;
-    try { parsed = parseEnvelope(envObj); } catch { await this.opts.redis.xack(stream, group, entryId); return; }
+    try { parsed = parseEnvelope(envObj); } catch { await this.redis.xack(stream, group, entryId); return; }
 
     const dispatcher = this.dispatchers.get(service);
-    if (!dispatcher) { await this.opts.redis.xack(stream, group, entryId); return; }
+    if (!dispatcher) { await this.redis.xack(stream, group, entryId); return; }
 
     const reply = await dispatcher(parsed);
     if (replyTo && reply) {
-      await this.opts.redis.xadd(
+      await this.redis.xadd(
         replyTo, 'MAXLEN', '~', String(this.replyStreamMaxLen), '*',
         'type', 'rpc', 'envelope', JSON.stringify(reply),
       );
     }
-    await this.opts.redis.xack(stream, group, entryId);
+    await this.redis.xack(stream, group, entryId);
   }
 }

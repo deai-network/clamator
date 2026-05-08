@@ -1,6 +1,7 @@
 from __future__ import annotations
 import asyncio
 import json
+import os
 import uuid
 from typing import Any
 
@@ -15,11 +16,20 @@ from .keys import command_stream, reply_stream
 
 class ClientRedisTransport:
     def __init__(
-        self, *, redis: Redis, key_prefix: str,
+        self, *, redis: Redis | None = None, redis_url: str | None = None,
+        key_prefix: str,
         instance_id: str | None = None,
         default_timeout_ms: int = 30_000,
     ) -> None:
-        self._redis = redis
+        if redis is not None and redis_url is not None:
+            raise ClamatorTransportError("provide either `redis` or `redis_url`, not both")
+        if redis is not None:
+            self._redis = redis
+            self._owns_redis = False
+        else:
+            url = redis_url or os.environ.get("REDIS_URL") or "redis://localhost:6379"
+            self._redis = Redis.from_url(url)
+            self._owns_redis = True
         self._key_prefix = key_prefix
         self.instance_id = instance_id or str(uuid.uuid4())
         self._reply_stream = reply_stream(key_prefix, self.instance_id)
@@ -92,6 +102,11 @@ class ClientRedisTransport:
             await self._redis.delete(self._reply_stream)
         except Exception:
             pass
+        if self._owns_redis:
+            try:
+                await self._redis.aclose()
+            except Exception:
+                pass
 
     async def _reply_loop(self) -> None:
         last_id = "0"

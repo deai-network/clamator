@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import type { Redis } from 'ioredis';
+import IORedis, { type Redis } from 'ioredis';
 import {
   parseEnvelope, EnvelopeKind, ClamatorTransportError,
   type Transport, type SendOptions, type Dispatcher,
@@ -7,7 +7,10 @@ import {
 import { commandStream, replyStream } from './keys.js';
 
 export interface ClientTransportOptions {
-  redis: Redis;
+  /** Existing ioredis instance. Mutually exclusive with `redisUrl`. */
+  redis?: Redis;
+  /** Redis URL. If neither `redis` nor `redisUrl` is provided, falls back to `process.env.REDIS_URL` then `redis://localhost:6379`. */
+  redisUrl?: string;
   keyPrefix: string;
   instanceId?: string;
   defaultTimeoutMs?: number;
@@ -21,6 +24,9 @@ interface Pending {
 
 export class ClientRedisTransport implements Transport {
   readonly instanceId: string;
+  private readonly redis: Redis;
+  private readonly ownsRedis: boolean;
+  private readonly keyPrefix: string;
   private readonly replyStream: string;
   private state: 'idle' | 'started' | 'stopped' = 'idle';
   private pending = new Map<string, Pending>();
@@ -30,7 +36,18 @@ export class ClientRedisTransport implements Transport {
   // xadd calls in send() are not queued behind the blocking read.
   private replyRedis: Redis | null = null;
 
-  constructor(private readonly opts: ClientTransportOptions) {
+  constructor(opts: ClientTransportOptions) {
+    if (opts.redis && opts.redisUrl)
+      throw new ClamatorTransportError('provide either `redis` or `redisUrl`, not both');
+    if (opts.redis) {
+      this.redis = opts.redis;
+      this.ownsRedis = false;
+    } else {
+      const url = opts.redisUrl ?? process.env.REDIS_URL ?? 'redis://localhost:6379';
+      this.redis = new IORedis(url);
+      this.ownsRedis = true;
+    }
+    this.keyPrefix = opts.keyPrefix;
     this.instanceId = opts.instanceId ?? randomUUID();
     this.replyStream = replyStream(opts.keyPrefix, this.instanceId);
   }
@@ -52,8 +69,8 @@ export class ClientRedisTransport implements Transport {
         reject(new ClamatorTransportError('call timeout'));
       }, sendOpts.timeoutMs);
       this.pending.set(idStr, { resolve, reject, timer });
-      void this.opts.redis.xadd(
-        commandStream(this.opts.keyPrefix, parsed.service),
+      void this.redis.xadd(
+        commandStream(this.keyPrefix, parsed.service),
         '*',
         'type', 'rpc',
         'envelope', JSON.stringify(env),
@@ -74,8 +91,8 @@ export class ClientRedisTransport implements Transport {
     const parsed = parseEnvelope(env);
     if (parsed.kind !== EnvelopeKind.Notification)
       throw new ClamatorTransportError('notify requires a notification envelope');
-    await this.opts.redis.xadd(
-      commandStream(this.opts.keyPrefix, parsed.service),
+    await this.redis.xadd(
+      commandStream(this.keyPrefix, parsed.service),
       '*',
       'type', 'rpc',
       'envelope', JSON.stringify(env),
@@ -90,7 +107,7 @@ export class ClientRedisTransport implements Transport {
     this.replyLoopAbort = false;
     // Use a dedicated duplicate connection for the blocking XREAD so that
     // xadd commands in send() are not queued behind the blocking read.
-    this.replyRedis = this.opts.redis.duplicate();
+    this.replyRedis = this.redis.duplicate();
     this.replyLoop = this.runReplyLoop().catch(err => {
       // surface fatal loop errors
       console.error('[clamator/over-redis] reply loop fatal:', err);
@@ -108,9 +125,12 @@ export class ClientRedisTransport implements Transport {
       p.reject(new ClamatorTransportError('transport stopped'));
       this.pending.delete(id);
     }
-    try { await this.opts.redis.del(this.replyStream); } catch { /* best effort */ }
+    try { await this.redis.del(this.replyStream); } catch { /* best effort */ }
     try { await this.replyRedis?.quit(); } catch { /* best effort */ }
     this.replyRedis = null;
+    if (this.ownsRedis) {
+      try { await this.redis.quit(); } catch { /* best effort */ }
+    }
     this.state = 'stopped';
   }
 
