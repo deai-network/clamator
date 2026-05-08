@@ -178,7 +178,7 @@ function parseHandledCount(proc: ChildProcessWithoutNullStreams): number | null 
   const matches = [...full.matchAll(/^HANDLED:(\d+)$/gm)];
   if (matches.length === 0) return null;
   // Use the last occurrence
-  return parseInt(matches[matches.length - 1][1]!, 10);
+  return parseInt(matches[matches.length - 1]![1]!, 10);
 }
 
 async function waitForReady(
@@ -343,6 +343,7 @@ function checkExpectations(
         return `expected result at index ${idx} but got only ${results.length} results`;
       }
       const r = results[idx++];
+      if (!r) return `call[${idx - 1}] ${call.method}: missing client result`;
       if (!call.expect) continue;
 
       const exp = call.expect;
@@ -520,12 +521,9 @@ async function runDirectionalScenario(
     }
 
     const failure = checkExpectations(s, clientOutput.results, serverACalls, serverBCalls);
-    return {
-      name: s.name,
-      direction: dirLabel,
-      passed: failure === null,
-      reason: failure ?? undefined,
-    };
+    const result: RunResult = { name: s.name, direction: dirLabel, passed: failure === null };
+    if (failure !== null) result.reason = failure;
+    return result;
   } catch (e) {
     return {
       name: s.name,
