@@ -6,7 +6,11 @@ from enum import Enum
 from typing import Any
 
 SERVICE_RE = re.compile(r"^[a-z][a-z0-9-]*$")
-METHOD_RE = re.compile(r"^[a-z][a-zA-Z0-9-]*$")
+# Method names must be valid identifiers in both TS and Py output of the codegen.
+# Hyphens were previously allowed in the wire-side regex but broke codegen Py
+# emission ("def group-cancel" is invalid syntax). Tightened in v0.1.6 to keep
+# the wire-side and codegen-side validity definitions in agreement.
+METHOD_RE = re.compile(r"^[a-z][a-zA-Z0-9]*$")
 
 
 class EnvelopeKind(Enum):
