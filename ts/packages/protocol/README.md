@@ -51,6 +51,28 @@ Both methods and notifications send a request envelope; only methods produce a r
 
 If you would otherwise add a method that returns nothing solely to confirm delivery, prefer a method returning `z.object({})` over a notification — the response envelope is the confirmation. Pick a notification only when "did this run?" is genuinely not a question the caller will ever ask.
 
+## Errors
+
+Throw `RpcError` from a handler to surface a structured JSON-RPC error to the caller. The constructor takes a `code`, a `message`, and an optional `data` payload:
+
+```typescript
+import { describe, it, expect } from 'vitest';
+import { RpcError } from '../src/index.js';
+
+describe('RpcError', () => {
+  it('constructs with code, message, and data', () => {
+    const err = new RpcError(-32001, 'forbidden', { reason: 'no-token' });
+    expect(err.code).toBe(-32001);
+    expect(err.message).toBe('forbidden');
+    expect(err.data).toEqual({ reason: 'no-token' });
+  });
+});
+```
+
+(Verbatim from `ts/packages/protocol/tests/rpc-error.test.ts:1-11`.)
+
+Reserved JSON-RPC error codes (`-32600` to `-32603` for protocol-level errors, `-32000` to `-32099` reserved for transport implementations) are owned by the protocol layer; pick application-specific codes outside that range.
+
 ## Links
 
 - Sibling (Python): [`clamator-protocol`](https://pypi.org/project/clamator-protocol/)
