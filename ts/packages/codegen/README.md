@@ -83,7 +83,7 @@ class ArithService(ABC):
     async def ping(self, params: PingParams) -> None: ...
 ```
 
-(Verbatim from `py/packages/over-redis/tests/generated/arith.py:42-47`.)
+(Verbatim from `py/packages/over-redis/tests/generated/arith.py:43-48`.)
 
 Method-name conversion: a Zod method declared as `addEvent` on the contract becomes `add_event` on the ABC (camelCase in TS, snake_case in Py). Subclass the ABC to register a service: `class MyService(ArithService): async def add(self, params): ...`. The TS side emits a sibling `<Service>Service` interface plus a `<Service>Client` proxy class; consult the matching `arith.ts` under the same `tests/generated/` directory for the TS surface.
 
