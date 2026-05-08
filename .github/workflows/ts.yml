@@ -27,6 +27,9 @@ jobs:
           restore-keys: pnpm-${{ runner.os }}-
       - name: Install
         run: cd ts && pnpm install --frozen-lockfile
+      - name: Check READMEs verbatim
+        continue-on-error: true
+        run: node scripts/check-readme-verbatim.mjs
       - name: Lint
         run: cd ts && pnpm -r lint
       - name: Build
