@@ -63,7 +63,7 @@ import { RedisRpcClient } from '../src/index.js';
 import { ArithClient } from './generated/arith.js';
 
 export async function callArith(opts: { redis: IORedis; keyPrefix: string }) {
-  const client = new RedisRpcClient({ redis: opts.redis, keyPrefix: opts.keyPrefix, defaultTimeoutMs: 3000 }); // default timeout 30 s; no auto-retry on disconnect; timeouts not propagated to server
+  const client = new RedisRpcClient({ redis: opts.redis, keyPrefix: opts.keyPrefix, defaultTimeoutMs: 3000 }); // default timeout 30 s on the full round-trip (xadd → handler → reply); no auto-retry on disconnect; timeouts not propagated to server (server completes the handler and writes a reply the client ignores)
   await client.start();
   const arith = new ArithClient(client);
   const r = await arith.add({ a: 2, b: 3 });
@@ -74,9 +74,13 @@ export async function callArith(opts: { redis: IORedis; keyPrefix: string }) {
 
 (Verbatim from `ts/packages/over-redis/tests/client.ts:1-12`. In your own code, replace `../src/index.js` with `@clamator/over-redis`.)
 
-Call `await server.stop()` to shut down — drains in-flight handlers up to `graceMs` (default 5 s) before disconnecting.
+`server.start()` returns once each registered service has its consumer group created and its read loop spawned; it does not block. Your application controls the server's lifetime. Call `await server.stop()` to shut down — drains in-flight handlers up to `graceMs` (default 5 s) before disconnecting.
+
+A single server can host multiple services. Call `registerService(contract, handlers)` once per contract before `start()`; each service gets its own consumer group keyed by the service name. Registrations after `start()` are silently ignored — no consumer group or read loop is created for them.
 
 By default the connection is built from `$REDIS_URL` (or `redis://localhost:6379`). Pass `redisUrl` for a different URL, or `redis` for a pre-built `ioredis` instance.
+
+Sharing one injected `redis` instance across multiple `RedisRpcServer` and `RedisRpcClient` instances is safe. Each server/client manages its own subscription internally — for blocking stream reads (XREADGROUP, XREAD on the reply stream), the transport calls `redis.duplicate()` to obtain a dedicated connection so the injected one stays available for non-blocking ops (XADD, XACK, XAUTOCLAIM).
 
 ## Key surface
 

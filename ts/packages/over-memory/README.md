@@ -59,7 +59,7 @@ import { MemoryBus, MemoryRpcClient } from '../src/index.js';
 import { ArithClient } from './generated/arith.js';
 
 export async function callArith(bus: MemoryBus) {
-  const client = new MemoryRpcClient({ bus }); // default timeout 30 s (pass defaultTimeoutMs to override); no retry; timeouts not propagated to server
+  const client = new MemoryRpcClient({ bus }); // default timeout 30 s on the full round-trip (call → handler → reply); pass defaultTimeoutMs to override; no retry; timeouts not propagated to server
   await client.start();
   const arith = new ArithClient(client);
   const r = await arith.add({ a: 2, b: 3 });
@@ -70,7 +70,9 @@ export async function callArith(bus: MemoryBus) {
 
 (Verbatim from `ts/packages/over-memory/tests/client.ts:1-11`. In your own code, replace `../src/index.js` with `@clamator/over-memory`.)
 
-Call `await server.stop()` to shut down — since the loopback is in-process, the drain is instantaneous and the server unregisters from the bus without closing any external resource.
+`server.start()` returns once handlers are registered on the bus; it does not block. Your application controls the server's lifetime. Call `await server.stop()` to shut down — since the loopback is in-process, the drain is instantaneous and the server unregisters from the bus without closing any external resource.
+
+A single server can host multiple services. Call `registerService(contract, handlers)` once per contract before `start()`; each is registered as its own dispatcher on the shared bus. Registrations after `start()` are silently ignored.
 
 `MemoryBus()` takes no arguments and is the only wiring needed.
 

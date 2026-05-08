@@ -54,7 +54,7 @@ from .generated.arith import AddParams, AddResult, ArithClient
 
 
 async def call_arith(*, redis: Redis, key_prefix: str) -> AddResult:
-    client = RedisRpcClient(redis=redis, key_prefix=key_prefix, default_timeout_ms=3000)  # default timeout 30 s; no auto-retry on disconnect; timeouts not propagated to server  # noqa: E501
+    client = RedisRpcClient(redis=redis, key_prefix=key_prefix, default_timeout_ms=3000)  # default timeout 30 s on the full round-trip (xadd → handler → reply); no auto-retry on disconnect; timeouts not propagated to server (server completes the handler and writes a reply the client ignores)  # noqa: E501
     await client.start()
     arith = ArithClient(client)
     r = await arith.add(AddParams(a=2, b=3))
@@ -64,9 +64,13 @@ async def call_arith(*, redis: Redis, key_prefix: str) -> AddResult:
 
 (Verbatim from `py/packages/over-redis/tests/client.py:1-13`.)
 
-Call `await server.stop()` to shut down — drains in-flight handlers up to `grace_ms` (default 5 s) before disconnecting.
+`server.start()` returns once each registered service has its consumer group created and its read loop spawned; it does not block. Your application controls the server's lifetime. Call `await server.stop()` to shut down — drains in-flight handlers up to `grace_ms` (default 5 s) before disconnecting.
+
+A single server can host multiple services. Call `register_service(contract, handler_obj)` once per contract before `start()`; each service gets its own consumer group keyed by the service name. Registrations after `start()` are silently ignored — no consumer group or read loop is created for them.
 
 By default the connection is built from `$REDIS_URL` (or `redis://localhost:6379`). Pass `redis_url=` for a different URL, or `redis=` for a pre-built `redis.asyncio.Redis` instance.
+
+Sharing one injected `redis` instance across multiple `RedisRpcServer` and `RedisRpcClient` instances is safe. Each server/client manages its own subscription internally; XREADGROUP and reply-stream XREAD calls use short polling blocks, so non-blocking ops (XADD, XACK, XAUTOCLAIM) on the same connection interleave without deadlock.
 
 ## Key surface
 

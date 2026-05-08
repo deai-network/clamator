@@ -49,7 +49,7 @@ from .generated.arith import AddParams, AddResult, ArithClient
 
 
 async def call_arith(bus: MemoryBus) -> AddResult:
-    client = MemoryRpcClient(bus=bus)  # default timeout 30 s (pass default_timeout_ms to override); no retry; timeouts not propagated to server  # noqa: E501
+    client = MemoryRpcClient(bus=bus)  # default timeout 30 s on the full round-trip (call → handler → reply); pass default_timeout_ms to override; no retry; timeouts not propagated to server  # noqa: E501
     await client.start()
     arith = ArithClient(client)
     r = await arith.add(AddParams(a=2, b=3))
@@ -59,9 +59,11 @@ async def call_arith(bus: MemoryBus) -> AddResult:
 
 (Verbatim from `py/packages/over-memory/tests/client.py:1-12`.)
 
-Call `await server.stop()` to shut down — since the loopback is in-process, the drain is instantaneous and the server unregisters from the bus without closing any external resource.
+`server.start()` returns once handlers are registered on the bus; it does not block. Your application controls the server's lifetime. Call `await server.stop()` to shut down — since the loopback is in-process, the drain is instantaneous and the server unregisters from the bus without closing any external resource.
 
-`MemoryBus()` takes no arguments and is the only wiring needed. The loopback is synchronous within a single asyncio task — no timeouts, retries, or stream parameters.
+A single server can host multiple services. Call `register_service(contract, handler_obj)` once per contract before `start()`; each is registered as its own dispatcher on the shared bus. Registrations after `start()` are silently ignored.
+
+`MemoryBus()` takes no arguments and is the only wiring needed. The loopback is synchronous within a single asyncio task — no timeouts, retries, or stream parameters beyond the client's `default_timeout_ms`.
 
 ## Key surface
 
