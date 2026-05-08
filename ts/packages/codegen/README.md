@@ -22,17 +22,17 @@ npx @clamator/codegen \
 The interop test runner invokes the CLI like this:
 
 ```typescript
-const args = [
-  codegenCli,
-  '--src', contractsSrc,
-  '--out-ts', outTs,
-  '--out-py', outPy,
-  '--manifest', manifestPath,
-  '--ts-contract-import', '../../contracts/index.js',
-];
+  const args = [
+    codegenCli,
+    '--src', contractsSrc,
+    '--out-ts', outTs,
+    '--out-py', outPy,
+    '--manifest', manifestPath,
+    '--ts-contract-import', '../../contracts/index.js',
+  ];
 ```
 
-(Verbatim from `tests/interop/lib/runner.ts`. `codegenCli` is the path to `dist/cli.js` of this package.)
+(Verbatim from `tests/interop/lib/runner.ts:291-298`. `codegenCli` is the path to `dist/cli.js` of this package.)
 
 Pass `--out-py` only when you want Python output. The Python emitter requires the [`datamodel-code-generator`](https://pypi.org/project/datamodel-code-generator/) Python tool on `PATH`.
 

@@ -33,7 +33,7 @@ const arith = defineContract('arith', {
 });
 ```
 
-(Verbatim from `ts/packages/over-memory/tests/loopback.test.ts`.)
+(Verbatim from `ts/packages/over-memory/tests/loopback.test.ts:6-16`.)
 
 ## Key exports
 

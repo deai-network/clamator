@@ -29,7 +29,7 @@ arith = Contract(
 )
 ```
 
-(Verbatim from `py/packages/over-memory/tests/test_loopback.py`.)
+(Verbatim from `py/packages/over-memory/tests/test_loopback.py:21-27`.)
 
 When `clamator-protocol` is consumed alongside generated wrappers from `@clamator/codegen`, the `Contract` and `MethodEntry` values are produced by codegen — the snippet above is what direct authors of test contracts or custom tooling write.
 
