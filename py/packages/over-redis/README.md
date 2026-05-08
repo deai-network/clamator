@@ -120,7 +120,9 @@ Multiple `RedisRpcServer` instances sharing the same `key_prefix` form a competi
 
 **On start.** The server's consumer loop reads new entries via XREADGROUP with id `>`. Pending entries from a prior session — entries XREADGROUPed but not XACKed before a crash — are reclaimed via XAUTOCLAIM after `consumer_claim_idle_ms` (default 60s) elapses; new entries arriving in the meantime are processed normally.
 
-**Per-service dispatch is serialized within a single server.** Each registered service has its own consumer loop that reads up to 16 messages per XREADGROUP poll and processes them one at a time (`await` per message; no `asyncio.create_task`). Multiple services registered on the same server run their own consumer loops concurrently, but two requests for the same service on the same server are not parallelized. To process one service's requests in parallel, run multiple `RedisRpcServer` instances sharing the same `key_prefix` — the consumer group splits work between them.
+**Per-service dispatch is serialized within a single server.** Each registered service has its own consumer loop that reads up to 16 messages per XREADGROUP poll and processes them one at a time (`await` per message; no `asyncio.create_task`). Multiple services registered on the same server run their own consumer loops concurrently, but two requests for the same service on the same server are not parallelized. To process one service's requests in parallel, run multiple `RedisRpcServer` instances sharing the same `key_prefix` — the consumer group splits work between them. As an alternative for fire-and-forget-shaped workloads on a single server, your handler can spawn the actual work as `asyncio.create_task(...)` and return immediately, which makes the consumer-loop dispatch effectively non-blocking; the reply then confirms only that the work was accepted, not that it completed.
+
+**Single-consumer case.** For single-server deployments (one server per backend), worker-pool semantics degenerate trivially: the consumer group has one consumer, every request goes to that consumer, and no fan-out concerns apply.
 
 ## Fire-and-forget operations
 

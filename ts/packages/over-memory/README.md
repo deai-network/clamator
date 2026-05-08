@@ -94,6 +94,10 @@ N/A — `MemoryBus` owns no external state. There are no Redis keys, no streams,
 
 N/A — there is no external connection to own. `MemoryRpcServer` and `MemoryRpcClient` share a `MemoryBus` that lives entirely in-process; `stop()` releases its references without closing any external resource.
 
+## Protocol-level parity with over-redis
+
+Params/result validation, error code mapping, handler exception wrapping, and `register_service` semantics are identical to `@clamator/over-redis` — both transports share the same dispatcher (`RpcServerCore` from `@clamator/protocol`). Only the wire substrate differs. Tests written against this transport for protocol-level behaviors translate directly to over-redis.
+
 ## When to reach for this vs. `@clamator/over-redis`
 
 - `@clamator/over-memory` — tests, embedded scenarios, anything single-process.
