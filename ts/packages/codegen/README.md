@@ -104,6 +104,12 @@ Method-name conversion: a Zod method declared as `addEvent` on the contract beco
 
 The interop suite uses this exact pattern (regenerate twice into separate tmp directories and compare manifests byte-for-byte) to verify codegen determinism — see `tests/interop/lib/runner.ts:415-425`.
 
+## Browser consumers
+
+The source contract file (the one calling `defineContract(...)`) and the generated TS wrapper both import `@clamator/protocol` at runtime. `@clamator/protocol` uses Node-only APIs (`node:crypto`) and cannot be loaded in a browser bundle.
+
+If a consumer wants to share *types* with browser-side code — for example, exposing failure-reason enums or result shapes to a UI — those types must live in a file that does not import from `@clamator/protocol`. The recommended pattern is to keep browser-shareable Zod schemas (enums, shared object schemas) in a separate module (e.g. `engine-failure-reasons.ts`), and have the contract source file import from there. Browser-facing barrels (`index.ts`) can then re-export from the schema-only file safely.
+
 ## Links
 
 - Protocol packages: [`@clamator/protocol`](https://www.npmjs.com/package/@clamator/protocol), [`clamator-protocol`](https://pypi.org/project/clamator-protocol/)

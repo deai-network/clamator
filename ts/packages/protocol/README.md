@@ -86,6 +86,10 @@ clamator has no authorization at the protocol or transport layer. Any process th
 
 Apply caller-identity checks at the boundary: a gateway (typically an HTTP server in front of the typed proxy) enforces who-can-call-what before invoking the proxy method. For network-substrate transports, deploy the substrate behind a network you trust (TLS, AUTH, ACLs, private VPC).
 
+## Browser consumers
+
+`@clamator/protocol` uses Node-only APIs (`node:crypto`) and cannot be loaded in a browser bundle. Importing the contract source file (which calls `defineContract(...)` from this package) into a browser-targeted bundle will fail. To share Zod *types* between server-side contracts and browser code, keep the browser-shareable schemas in a separate module that does not import `@clamator/protocol`. See [`@clamator/codegen`'s "Browser consumers" section](https://www.npmjs.com/package/@clamator/codegen) for the recommended layout.
+
 ## Links
 
 - Sibling (Python): [`clamator-protocol`](https://pypi.org/project/clamator-protocol/)
