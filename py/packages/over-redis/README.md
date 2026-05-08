@@ -16,22 +16,15 @@ Contracts are authored in TypeScript and the Python sibling is produced by [`@cl
 npx @clamator/codegen --src contracts --out-py generated
 ```
 
-The emitted `generated/arith.py` exports Pydantic models, a typed `ArithClient`, an `ArithService` ABC, and the `arith_contract` `Contract` object.
+The emitted `generated/arith.py` exports Pydantic models, a typed `ArithClient`, an `ArithService` ABC, and the `arith_contract` `Contract` object. Wire server and client through Redis, talk via `ArithClient`.
 
-The following test demonstrates both the server and client sides round-trip together using the generated `ArithClient` proxy and `ArithService` ABC:
+Server-side — register handlers and start:
 
 ```python
-from clamator_over_redis import RedisRpcClient, RedisRpcServer
+from clamator_over_redis import RedisRpcServer
 from redis.asyncio import Redis
 
-from .generated.arith import (
-    AddParams,
-    AddResult,
-    ArithClient,
-    ArithService,
-    PingParams,
-    arith_contract,
-)
+from .generated.arith import AddParams, AddResult, ArithService, PingParams, arith_contract
 
 
 class Arith(ArithService):
@@ -42,24 +35,34 @@ class Arith(ArithService):
         return None
 
 
-async def test_round_trip_via_codegen_typed_proxy(redis_url, key_prefix, cleanup):
-    rs = Redis.from_url(redis_url)
-    rc = Redis.from_url(redis_url)
-    server = RedisRpcServer(redis=rs, key_prefix=key_prefix)  # injected redis= not closed by stop() — caller owns lifecycle; omit to let transport own it
-    server.register_service(arith_contract, Arith())  # must precede start() — post-start registrations are silently ignored, no consumer group or read loop is created
+async def build_arith_server(*, redis: Redis, key_prefix: str) -> RedisRpcServer:
+    server = RedisRpcServer(redis=redis, key_prefix=key_prefix)  # injected redis= not closed by stop() — caller owns lifecycle; omit to let transport own it  # noqa: E501
+    server.register_service(arith_contract, Arith())  # must precede start() — post-start registrations are silently ignored, no consumer group or read loop is created  # noqa: E501
     await server.start()
-    client = RedisRpcClient(redis=rc, key_prefix=key_prefix, default_timeout_ms=3000)  # default timeout 30 s; no auto-retry on disconnect; timeouts not propagated to server
+    return server
+```
+
+(Verbatim from `py/packages/over-redis/tests/server.py:1-19`.)
+
+Client-side — call the typed proxy:
+
+```python
+from clamator_over_redis import RedisRpcClient
+from redis.asyncio import Redis
+
+from .generated.arith import AddParams, AddResult, ArithClient
+
+
+async def call_arith(*, redis: Redis, key_prefix: str) -> AddResult:
+    client = RedisRpcClient(redis=redis, key_prefix=key_prefix, default_timeout_ms=3000)  # default timeout 30 s; no auto-retry on disconnect; timeouts not propagated to server  # noqa: E501
     await client.start()
     arith = ArithClient(client)
     r = await arith.add(AddParams(a=2, b=3))
-    assert r.sum == 5  # noqa: PLR2004
     await client.stop()
-    await server.stop()  # drains in-flight handlers up to grace_ms (default 5 s), then stops transport
-    await rs.aclose()
-    await rc.aclose()
+    return r
 ```
 
-(Verbatim from `py/packages/over-redis/tests/test_proxy_round_trip.py:1-36`.)
+(Verbatim from `py/packages/over-redis/tests/client.py:1-13`.)
 
 By default the connection is built from `$REDIS_URL` (or `redis://localhost:6379`). Pass `redis_url=` for a different URL, or `redis=` for a pre-built `redis.asyncio.Redis` instance.
 
