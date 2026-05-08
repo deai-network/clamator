@@ -11,6 +11,11 @@ dependencies = [
   "pydantic>=2.5",
 ]
 
+[project.urls]
+Homepage = "https://github.com/deai-network/clamator"
+Repository = "https://github.com/deai-network/clamator"
+Issues = "https://github.com/deai-network/clamator/issues"
+
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"

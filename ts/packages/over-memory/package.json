@@ -33,5 +33,15 @@
     "typescript": "^5.6.0",
     "vitest": "^2.1.0",
     "zod": "^3.23.0"
-  }
+  },
+  "homepage": "https://github.com/deai-network/clamator",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/deai-network/clamator.git",
+    "directory": "ts/packages/over-memory"
+  },
+  "bugs": {
+    "url": "https://github.com/deai-network/clamator/issues"
+  },
+  "author": "Kristof Csillag"
 }
