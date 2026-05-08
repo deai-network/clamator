@@ -92,6 +92,40 @@ Sharing one injected `redis` instance across multiple `RedisRpcServer` and `Redi
 
 Per-client reply streams are bounded: the server XADDs replies with `MAXLEN ~ replyStreamMaxLen` (default 1024) and the client `DEL`s its reply stream on `stop()`. If a client process crashes without calling `stop()`, the reply-stream key persists with up to ~1024 entries until manually deleted; there is no Redis-side TTL.
 
+## Lifecycle integration
+
+`start()` returns immediately, leaving the server running in the background — your application owns the wait-and-shutdown loop. The canonical pattern is to await a Promise that resolves when SIGTERM/SIGINT arrives, with the signal handler triggering `await server.stop()`:
+
+```typescript
+import type IORedis from 'ioredis';
+import { RedisRpcServer } from '../src/index.js';
+import { arithContract } from './contracts/arith.js';
+import type { ArithService } from './generated/arith.js';
+
+// Long-running server that stops gracefully on SIGTERM/SIGINT.
+// Wire pattern: start the server, then await a Promise that resolves when a
+// signal arrives. The signal handler triggers stop() and resolves.
+export async function runArithServer(opts: { redis: IORedis; keyPrefix: string }) {
+  const server = new RedisRpcServer({ redis: opts.redis, keyPrefix: opts.keyPrefix });
+  const handlers: ArithService = {
+    add: async ({ a, b }) => ({ sum: a + b }),
+    ping: async (_p) => {},
+  };
+  server.registerService(arithContract, handlers);
+  await server.start();
+  await new Promise<void>((resolve) => {
+    const stop = async () => {
+      await server.stop();
+      resolve();
+    };
+    process.once('SIGTERM', stop);
+    process.once('SIGINT', stop);
+  });
+}
+```
+
+(Verbatim from `ts/packages/over-redis/tests/server-lifecycle.example.ts:1-25`. In your own code, replace `../src/index.js` with `@clamator/over-redis`.)
+
 ## Key surface
 
 - `RedisRpcServer({ keyPrefix, redis?, redisUrl?, ... })` — `registerService(contract, handlers)`, `start()`, `stop()`.
