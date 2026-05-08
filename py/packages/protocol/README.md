@@ -60,6 +60,12 @@ Commit the emitted files alongside your code — they are vendored generated art
 
 The Python package then imports `AddParams`, `AddResult`, `ArithClient`, `ArithService`, and `arith_contract` from `myapp._generated.arith`.
 
+## Version compatibility
+
+All seven clamator packages (TS + Py protocol, both transports on both languages, codegen) are released in lockstep — same `X.Y.Z` version, every time. The release-verification workflow refuses to publish a tag unless every package's manifest reports the matching version, and the same workflow runs the cross-language interop test suite. **Pin all your clamator packages to the same `X.Y.Z`** on both client and server sides — `clamator-protocol==X.Y.Z` + `clamator-over-redis==X.Y.Z` on the Py side, `@clamator/protocol@X.Y.Z` + `@clamator/over-redis@X.Y.Z` on the TS side.
+
+The drift you do need to worry about is **your contract source diverging from your committed generated wrappers**. The "Drift detection via the manifest" pattern in [`@clamator/codegen`](https://www.npmjs.com/package/@clamator/codegen) is the right tool: regenerate the manifest in CI and diff against the committed copy. At runtime, a contract mismatch surfaces as `RpcError(-32602, "Invalid params")` from server-side Pydantic validation — useful but generic; the manifest-diff pre-deploy check gives a more actionable error.
+
 ## Method or notification?
 
 Both methods and notifications send a request envelope; only methods produce a response envelope. Pick by the caller's needs, not the handler's.
