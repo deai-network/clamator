@@ -42,6 +42,15 @@ const arith = defineContract('arith', {
 - `ClamatorProtocolError`, `ClamatorTransportError` — distinguishable error classes for protocol-level vs. transport-level failures.
 - `Transport`, `Dispatcher` — interfaces a custom transport adapter implements.
 
+## Method or notification?
+
+Both methods and notifications send a request envelope; only methods produce a response envelope. Pick by the caller's needs, not the handler's.
+
+- **Use a method** when the caller needs to know whether the operation succeeded, get a value back, surface a structured `RpcError`, or sequence subsequent calls on completion. Methods carry a request id and the caller waits for the matching response or a timeout.
+- **Use a notification** when the caller is doing fire-and-forget work where neither success/failure nor a return value matters in the moment — telemetry, cache-busting, status pings. Notifications have no request id and produce no response; the caller cannot tell whether the handler ran, succeeded, or threw.
+
+If you would otherwise add a method that returns nothing solely to confirm delivery, prefer a method returning `z.object({})` over a notification — the response envelope is the confirmation. Pick a notification only when "did this run?" is genuinely not a question the caller will ever ask.
+
 ## Links
 
 - Sibling (Python): [`clamator-protocol`](https://pypi.org/project/clamator-protocol/)
