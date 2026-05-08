@@ -165,6 +165,54 @@ Call `await client.stop()` on each client during application shutdown to drain t
 
 Each generated proxy method accepts an optional opts object whose `timeoutMs` overrides the client's `defaultTimeoutMs` for that single call: `await arith.add({ a: 2, b: 3 }, { timeoutMs: 60_000 })`. When omitted, the client's `defaultTimeoutMs` applies. Notification proxy methods don't accept opts — they have no reply to wait for. The override is round-trip wall-time (xadd → handler → reply); cancellation and retry semantics are otherwise unchanged.
 
+## Custom-command extension
+
+To extend an existing engine with user-defined commands without running codegen, build a `Contract` by hand and register it on the same `RedisRpcServer` that already hosts the codegen-emitted services. Each `registerService` call is independent — the dispatcher does not care whether a contract came from codegen or was authored inline.
+
+```typescript
+import type IORedis from 'ioredis';
+import { defineContract, defineMethod } from '@clamator/protocol';
+import { z } from 'zod';
+import { RedisRpcServer } from '../src/index.js';
+import { arithContract } from './contracts/arith.js';
+import type { ArithService } from './generated/arith.js';
+
+// Hand-built contract for user-defined commands. Same shape as a codegen-
+// emitted contract; just authored inline instead of imported from a generated
+// module. Use this pattern when adding services to an engine at registration
+// time without going through the codegen pipeline (e.g., user-supplied
+// custom commands collected at boot).
+const customCommandsContract = defineContract('custom-commands', {
+  echo: defineMethod({
+    params: z.object({ msg: z.string() }),
+    result: z.object({ msg: z.string() }),
+  }),
+});
+
+// One RedisRpcServer hosts both the codegen-emitted `arith` service and the
+// hand-built `custom-commands` service. registerService must be called for
+// each contract before start(); each gets its own consumer group keyed by
+// the contract's service name.
+export async function buildExtendedServer(opts: { redis: IORedis; keyPrefix: string }) {
+  const server = new RedisRpcServer({ redis: opts.redis, keyPrefix: opts.keyPrefix });
+  const arithHandlers: ArithService = {
+    add: async ({ a, b }) => ({ sum: a + b }),
+    ping: async (_p) => {},
+  };
+  const customHandlers = {
+    echo: async ({ msg }: { msg: string }) => ({ msg }),
+  };
+  server.registerService(arithContract, arithHandlers);
+  server.registerService(customCommandsContract, customHandlers);
+  await server.start();
+  return server;
+}
+```
+
+(Verbatim from `ts/packages/over-redis/tests/custom-commands.example.ts:1-37`. In your own code, replace `../src/index.js` with `@clamator/over-redis`.)
+
+Before reaching for this pattern, see `@clamator/protocol`'s "Hand-built contracts" section — runtime contract construction defeats the contract guarantee, and is rarely the right tool. The fixture above is for the case where the *set* of services is known at startup but assembled from multiple sources (e.g., codegen-emitted core + user-registered extensions).
+
 ## Worker-pool semantics
 
 Multiple `RedisRpcServer` instances sharing the same `keyPrefix` form a competing-consumers pool: each call is processed by exactly one instance. They share a single Redis consumer group per service (named `<service>`); each server is a unique consumer (named `<service>:<instanceId>`). XREADGROUP delivers each request to exactly one server. A reclaim loop (`XAUTOCLAIM`) re-delivers messages unacknowledged for `consumerClaimIdleMs` (default 60,000 ms). Delivery semantics are at-least-once. To run a single-consumer scenario, run one server.

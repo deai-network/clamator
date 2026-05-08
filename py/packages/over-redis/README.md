@@ -160,6 +160,69 @@ Call `await client.stop()` on each client during application shutdown to drain t
 
 Each generated proxy method accepts an optional `timeout_ms` keyword argument that overrides the client's `default_timeout_ms` for that single call: `await arith.add(AddParams(a=2, b=3), timeout_ms=60_000)`. When omitted, the client's `default_timeout_ms` applies. Notification proxy methods don't accept the override — they have no reply to wait for. The override is round-trip wall-time (xadd → handler → reply); cancellation and retry semantics are otherwise unchanged.
 
+## Custom-command extension
+
+To extend an existing engine with user-defined commands without running codegen, build a `Contract` by hand and register it on the same `RedisRpcServer` that already hosts the codegen-emitted services. Each `register_service` call is independent — the dispatcher does not care whether a contract came from codegen or was authored inline.
+
+```python
+from clamator_over_redis import RedisRpcServer
+from clamator_protocol import Contract, MethodEntry
+from pydantic import BaseModel
+from redis.asyncio import Redis
+
+from .generated.arith import AddParams, AddResult, ArithService, PingParams, arith_contract
+
+
+class EchoP(BaseModel):
+    msg: str
+
+
+class EchoR(BaseModel):
+    msg: str
+
+
+# Hand-built contract for user-defined commands. Same shape as a codegen-
+# emitted contract; just authored inline instead of imported from a generated
+# module. Use this pattern when adding services to an engine at registration
+# time without going through the codegen pipeline (e.g., user-supplied
+# custom commands collected at boot).
+custom_commands_contract = Contract(
+    service="custom-commands",
+    methods={
+        "echo": MethodEntry(params_model=EchoP, result_model=EchoR, handler_attr="echo"),
+    },
+)
+
+
+class Arith(ArithService):
+    async def add(self, params: AddParams) -> AddResult:
+        return AddResult(sum=params.a + params.b)
+
+    async def ping(self, params: PingParams) -> None:
+        return None
+
+
+class CustomCommands:
+    async def echo(self, params: EchoP) -> EchoR:
+        return EchoR(msg=params.msg)
+
+
+# One RedisRpcServer hosts both the codegen-emitted arith service and the
+# hand-built custom-commands service. register_service must be called for
+# each contract before start(); each gets its own consumer group keyed by
+# the contract's service name.
+async def build_extended_server(*, redis: Redis, key_prefix: str) -> RedisRpcServer:
+    server = RedisRpcServer(redis=redis, key_prefix=key_prefix)
+    server.register_service(arith_contract, Arith())
+    server.register_service(custom_commands_contract, CustomCommands())
+    await server.start()
+    return server
+```
+
+(Verbatim from `py/packages/over-redis/tests/custom_commands_example.py:1-52`.)
+
+Before reaching for this pattern, see `clamator-protocol`'s "Hand-built contracts" section — runtime contract construction defeats the contract guarantee, and is rarely the right tool. The fixture above is for the case where the *set* of services is known at startup but assembled from multiple sources (e.g., codegen-emitted core + user-registered extensions).
+
 ## Worker-pool semantics
 
 Multiple `RedisRpcServer` instances sharing the same `key_prefix` form a competing-consumers pool: each call is processed by exactly one instance. They share a single Redis consumer group per service (named `<service>`); each server is a unique consumer (named `<service>:<instance_id>`). XREADGROUP delivers each request to exactly one server. A reclaim loop (`XAUTOCLAIM`) re-delivers messages unacknowledged for `consumer_claim_idle_ms` (default 60,000 ms). Delivery semantics are at-least-once. To run a single-consumer scenario, run one server.
