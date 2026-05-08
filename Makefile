@@ -1,4 +1,4 @@
-.PHONY: install build test lint clean release interop help
+.PHONY: install build test lint clean release interop help check-readmes
 
 help:                    ## list targets
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "%-12s %s\n", $$1, $$2}'
@@ -26,6 +26,9 @@ test:       ## per-lang unit tests (no interop)
 
 interop:    ## cross-lang interop tests (regen fixtures, spin redis, run scenarios)
 	bash tests/interop/run.sh
+
+check-readmes: ## verify README code blocks are verbatim against cited sources
+	node scripts/check-readme-verbatim.mjs
 
 clean:      ## clean all artifacts
 	cd ts && pnpm -r clean || true
