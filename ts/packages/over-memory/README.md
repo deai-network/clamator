@@ -42,20 +42,20 @@ import { ArithClient, type ArithService } from './generated/arith.js';
 
 describe('memory loopback via codegen typed proxy', () => {
   it('round-trips a successful call through ArithClient', async () => {
-    const bus = new MemoryBus();
-    const server = new MemoryRpcServer({ bus });
+    const bus = new MemoryBus(); // in-process only; no external state — bus is garbage-collected with the process
+    const server = new MemoryRpcServer({ bus }); // no external connection; stop() unregisters from the bus without closing any resource
     const handlers: ArithService = {
       add: async ({ a, b }) => ({ sum: a + b }),
     };
-    server.registerService(arithContract, handlers);
-    await server.start();
-    const client = new MemoryRpcClient({ bus });
+    server.registerService(arithContract, handlers); // must precede start() — post-start registrations are silently ignored, never registered on the bus
+    await server.start(); // idempotent if already started
+    const client = new MemoryRpcClient({ bus }); // default timeout 30 s (pass defaultTimeoutMs to override); no retry; timeouts not propagated to server
     await client.start();
     const arith = new ArithClient(client);
     const r = await arith.add({ a: 2, b: 3 });
     expect(r).toEqual({ sum: 5 });
     await client.stop();
-    await server.stop();
+    await server.stop(); // drains in-flight handlers up to graceMs (default 5 s), then stops transport
   });
 });
 ```
@@ -69,6 +69,18 @@ describe('memory loopback via codegen typed proxy', () => {
 - `MemoryBus` — constructor: `new MemoryBus()`. The connecting object passed to both server and client.
 - `MemoryRpcServer({ bus })` — `registerService(contract, handlers)`, `start()`, `stop()`.
 - `MemoryRpcClient({ bus })` — `start()`, `stop()`. Wrap with a generated `*Client` proxy for typed calls.
+
+## Worker-pool semantics
+
+N/A — this transport is a single-process loopback. Multiple `MemoryRpcServer` instances on the same `MemoryBus` do not form a competing-consumers pool because there is no shared substrate; each bus is in-memory to its constructing process. For cross-process worker-pool behavior, use `@clamator/over-redis`.
+
+## Owned external state
+
+N/A — `MemoryBus` owns no external state. There are no Redis keys, no streams, no files, no sockets. The bus is garbage-collected with the process.
+
+## Connection ownership
+
+N/A — there is no external connection to own. `MemoryRpcServer` and `MemoryRpcClient` share a `MemoryBus` that lives entirely in-process; `stop()` releases its references without closing any external resource.
 
 ## When to reach for this vs. `@clamator/over-redis`
 
