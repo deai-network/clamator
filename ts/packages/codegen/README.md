@@ -9,7 +9,9 @@ npm install -D @clamator/codegen
 npm install zod @clamator/protocol
 ```
 
-`@clamator/protocol` and `zod` are peer dependencies — codegen reads your contract source files, which import `defineContract`/`defineMethod`/`defineNotification` from `@clamator/protocol` and type-parameterize over `zod`. See the [`@clamator/protocol`](https://www.npmjs.com/package/@clamator/protocol) README's install section for the type-dedupe rationale.
+> **⚠️ Required: declare `zod` and `@clamator/protocol` in your own `package.json`.**
+>
+> Codegen reads your contract source files, which import `defineContract`/`defineMethod`/`defineNotification` from `@clamator/protocol` and type-parameterize over `zod`. Both are peer dependencies. Add `"zod": "^3.23.0"` and `"@clamator/protocol"` (matching version) to your package's `dependencies` for type-dedupe across your workspace. See [`@clamator/protocol`](https://www.npmjs.com/package/@clamator/protocol)'s install section for the rationale.
 
 ## CLI usage
 

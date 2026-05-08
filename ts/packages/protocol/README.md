@@ -8,7 +8,11 @@ Pure JSON-RPC 2.0 protocol primitives plus Zod-derived envelope types for clamat
 npm install @clamator/protocol zod
 ```
 
-**`zod` is a peer dependency — declare it in your own `package.json`** (any range compatible with `^3.23.0`). This ensures pnpm/npm picks a single physical `zod` copy across your workspace, so TypeScript sees one `ZodType` identity. Without your own `zod` declaration, package-manager dedupe heuristics may give different parts of your codebase distinct `zod` instances; mixed-source schemas then fail to compile with "type X is not assignable to type Y" errors despite being the same shape on both sides. The same applies for every consumer of `@clamator/over-memory`, `@clamator/over-redis`, and `@clamator/codegen`.
+> **⚠️ Required: declare `zod` in your own `package.json`.**
+>
+> `zod` is a peer dependency. Add `"zod": "^3.23.0"` (or any compatible 3.x range) to your package's `dependencies` — even if you don't import `zod` directly. Without this, pnpm/npm may resolve to two distinct physical `zod` copies across your workspace, and TypeScript will reject schemas crossing the boundary with "type X is not assignable to type Y" errors that look identical on both sides. The single-`zod`-copy invariant is the consumer's responsibility; clamator cannot enforce it from inside the package.
+>
+> The same requirement applies to consumers of `@clamator/over-memory`, `@clamator/over-redis`, and `@clamator/codegen`.
 
 ## When you reach for this
 
