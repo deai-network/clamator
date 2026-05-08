@@ -35,7 +35,9 @@ if [[ "$SUBCOMMAND" == "publish" ]]; then
   TS_PKGS=(ts/packages/protocol ts/packages/over-memory ts/packages/over-redis ts/packages/codegen)
   PY_PKGS=(py/packages/protocol py/packages/over-memory py/packages/over-redis)
 
-  echo "==> npm publish (dep order: protocol, over-memory, over-redis, codegen)"
+  echo "==> pnpm publish (dep order: protocol, over-memory, over-redis, codegen)"
+  # pnpm publish rewrites @clamator/* "workspace:*" deps to the real version
+  # automatically. Use pnpm (not npm) so this rewrite happens.
   for pkg in "${TS_PKGS[@]}"; do
     pushd "$REPO_ROOT/$pkg" >/dev/null
     name="$(jq -r .name package.json)"
@@ -45,7 +47,7 @@ if [[ "$SUBCOMMAND" == "publish" ]]; then
       exit 1
     fi
     echo "  publishing $name@$pubver ..."
-    npm publish --access public
+    pnpm publish --access public --no-git-checks
     popd >/dev/null
   done
 
@@ -91,18 +93,13 @@ fi
 echo "==> Bumping all packages to $VERSION"
 
 # --- TS packages ---
-# Dependencies on @clamator/* are stored as "workspace:*" in the source tree.
-# For publishing, npm does not understand workspace:* — replace with the real version.
+# Bump only the .version field. Leave @clamator/* deps as "workspace:*" so the
+# verification build/test/interop run uses workspace links. pnpm publish rewrites
+# workspace:* → the real version automatically at publish time.
 TS_PKGS=(ts/packages/protocol ts/packages/over-memory ts/packages/over-redis ts/packages/codegen)
 for pkg in "${TS_PKGS[@]}"; do
   if [[ ! -f "$pkg/package.json" ]]; then continue; fi
-  jq --arg v "$VERSION" \
-    '.version = $v
-     | if .dependencies then
-         .dependencies |= with_entries(
-           if .key | startswith("@clamator/") then .value = $v else . end
-         )
-       else . end' \
+  jq --arg v "$VERSION" '.version = $v' \
     "$pkg/package.json" > "$pkg/package.json.new"
   mv "$pkg/package.json.new" "$pkg/package.json"
 done
