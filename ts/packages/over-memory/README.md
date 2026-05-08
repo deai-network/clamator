@@ -32,37 +32,45 @@ Generate the typed proxies:
 npx @clamator/codegen --src contracts --out-ts generated --ts-contract-import '../contracts/arith.js'
 ```
 
-Wire server and client through a shared bus, talk via `ArithClient`:
+Server-side — register handlers and start:
 
 ```typescript
-import { describe, it, expect } from 'vitest';
-import { MemoryBus, MemoryRpcServer, MemoryRpcClient } from '../src/index.js';
+import { MemoryBus, MemoryRpcServer } from '../src/index.js';
 import { arithContract } from './contracts/arith.js';
-import { ArithClient, type ArithService } from './generated/arith.js';
+import type { ArithService } from './generated/arith.js';
 
-describe('memory loopback via codegen typed proxy', () => {
-  it('round-trips a successful call through ArithClient', async () => {
-    const bus = new MemoryBus(); // in-process only; no external state — bus is garbage-collected with the process
-    const server = new MemoryRpcServer({ bus }); // no external connection; stop() unregisters from the bus without closing any resource
-    const handlers: ArithService = {
-      add: async ({ a, b }) => ({ sum: a + b }),
-    };
-    server.registerService(arithContract, handlers); // must precede start() — post-start registrations are silently ignored, never registered on the bus
-    await server.start(); // idempotent if already started
-    const client = new MemoryRpcClient({ bus }); // default timeout 30 s (pass defaultTimeoutMs to override); no retry; timeouts not propagated to server
-    await client.start();
-    const arith = new ArithClient(client);
-    const r = await arith.add({ a: 2, b: 3 });
-    expect(r).toEqual({ sum: 5 });
-    await client.stop();
-    await server.stop(); // drains in-flight handlers up to graceMs (default 5 s), then stops transport
-  });
-});
+export async function buildArithServer(bus: MemoryBus) {
+  const server = new MemoryRpcServer({ bus }); // no external connection; stop() unregisters from the bus without closing any resource
+  const handlers: ArithService = {
+    add: async ({ a, b }) => ({ sum: a + b }),
+  };
+  server.registerService(arithContract, handlers); // must precede start() — post-start registrations are silently ignored, never registered on the bus
+  await server.start();
+  return server;
+}
 ```
 
-(Verbatim from `ts/packages/over-memory/tests/proxy-loopback.test.ts:1-23`.)
+(Verbatim from `ts/packages/over-memory/tests/server.ts:1-13`. In your own code, replace `../src/index.js` with `@clamator/over-memory`.)
 
-`MemoryBus()` takes no arguments and is the only wiring needed. The loopback is synchronous within a single event loop turn — no timeouts, retries, or stream parameters.
+Client-side — call the typed proxy:
+
+```typescript
+import { MemoryBus, MemoryRpcClient } from '../src/index.js';
+import { ArithClient } from './generated/arith.js';
+
+export async function callArith(bus: MemoryBus) {
+  const client = new MemoryRpcClient({ bus }); // default timeout 30 s (pass defaultTimeoutMs to override); no retry; timeouts not propagated to server
+  await client.start();
+  const arith = new ArithClient(client);
+  const r = await arith.add({ a: 2, b: 3 });
+  await client.stop();
+  return r;
+}
+```
+
+(Verbatim from `ts/packages/over-memory/tests/client.ts:1-11`. In your own code, replace `../src/index.js` with `@clamator/over-memory`.)
+
+`MemoryBus()` takes no arguments and is the only wiring needed.
 
 ## Key surface
 

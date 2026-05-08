@@ -1,23 +1,14 @@
 import { describe, it, expect } from 'vitest';
-import { MemoryBus, MemoryRpcServer, MemoryRpcClient } from '../src/index.js';
-import { arithContract } from './contracts/arith.js';
-import { ArithClient, type ArithService } from './generated/arith.js';
+import { MemoryBus } from '../src/index.js';
+import { buildArithServer } from './server.js';
+import { callArith } from './client.js';
 
 describe('memory loopback via codegen typed proxy', () => {
   it('round-trips a successful call through ArithClient', async () => {
     const bus = new MemoryBus();
-    const server = new MemoryRpcServer({ bus });
-    const handlers: ArithService = {
-      add: async ({ a, b }) => ({ sum: a + b }),
-    };
-    server.registerService(arithContract, handlers);
-    await server.start();
-    const client = new MemoryRpcClient({ bus });
-    await client.start();
-    const arith = new ArithClient(client);
-    const r = await arith.add({ a: 2, b: 3 });
+    const server = await buildArithServer(bus);
+    const r = await callArith(bus);
     expect(r).toEqual({ sum: 5 });
-    await client.stop();
-    await server.stop();
+    await server.stop(); // drains in-flight handlers up to graceMs (default 5 s), then stops transport
   });
 });
