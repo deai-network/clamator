@@ -66,10 +66,10 @@ describe.skipIf(!REDIS_URL)('redis round-trip', () => {
 
 - `redis` — an `ioredis` `IORedis` instance, dedicated to this server.
 - `keyPrefix` — string prefix for the request and response stream keys (e.g., `"my-service"`). Both sides must agree.
-- `instanceId` (optional) — unique id of this server instance; defaults to a random suffix. Used for redelivery / claim semantics.
-- `consumerClaimIdleMs` (optional) — milliseconds before a pending message becomes eligible for claim by another consumer; tune for your workload.
+- `instanceId` (optional) — unique id of this server instance; defaults to a random UUID. Used for redelivery / claim semantics.
+- `consumerClaimIdleMs` (optional) — milliseconds before a pending message becomes eligible for claim by another consumer; defaults to 60000.
 - `replyStreamMaxLen` (optional) — bound on the per-service reply stream length (Redis `MAXLEN`); defaults to 1024.
-- `shutdownGraceMs` (optional) — grace period in milliseconds for in-flight work to complete during `stop()`.
+- `shutdownGraceMs` (optional) — grace period in milliseconds for in-flight work to complete during `stop()`; defaults to 5000.
 
 `RedisRpcClient` constructor options:
 
