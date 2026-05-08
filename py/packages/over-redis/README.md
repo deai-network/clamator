@@ -45,16 +45,16 @@ class Arith(ArithService):
 async def test_round_trip_via_codegen_typed_proxy(redis_url, key_prefix, cleanup):
     rs = Redis.from_url(redis_url)
     rc = Redis.from_url(redis_url)
-    server = RedisRpcServer(redis=rs, key_prefix=key_prefix)
-    server.register_service(arith_contract, Arith())
+    server = RedisRpcServer(redis=rs, key_prefix=key_prefix)  # injected redis= not closed by stop() — caller owns lifecycle; omit to let transport own it
+    server.register_service(arith_contract, Arith())  # must precede start() — post-start registrations are silently ignored, no consumer group or read loop is created
     await server.start()
-    client = RedisRpcClient(redis=rc, key_prefix=key_prefix, default_timeout_ms=3000)
+    client = RedisRpcClient(redis=rc, key_prefix=key_prefix, default_timeout_ms=3000)  # default timeout 30 s; no auto-retry on disconnect; timeouts not propagated to server
     await client.start()
     arith = ArithClient(client)
     r = await arith.add(AddParams(a=2, b=3))
     assert r.sum == 5  # noqa: PLR2004
     await client.stop()
-    await server.stop()
+    await server.stop()  # drains in-flight handlers up to grace_ms (default 5 s), then stops transport
     await rs.aclose()
     await rc.aclose()
 ```
@@ -67,6 +67,18 @@ By default the connection is built from `$REDIS_URL` (or `redis://localhost:6379
 
 - `RedisRpcServer(*, key_prefix, redis=None, redis_url=None, ...)` — `register_service(contract, handler_obj)`, `start()`, `stop()`.
 - `RedisRpcClient(*, key_prefix, redis=None, redis_url=None, default_timeout_ms=30_000)` — `start()`, `stop()`. The instance is a `ClamatorClient`, so it can be wrapped by a generated `*Client` proxy.
+
+## Worker-pool semantics
+
+Multiple `RedisRpcServer` instances sharing the same `key_prefix` form a competing-consumers pool: each call is processed by exactly one instance. They share a single Redis consumer group per service (named `<service>`); each server is a unique consumer (named `<service>:<instance_id>`). XREADGROUP delivers each request to exactly one server. A reclaim loop (`XAUTOCLAIM`) re-delivers messages unacknowledged for `consumer_claim_idle_ms` (default 60,000 ms). Delivery semantics are at-least-once. To run a single-consumer scenario, run one server.
+
+## Keys owned under `key_prefix`
+
+| Pattern | Type | Purpose |
+|---|---|---|
+| `<key_prefix>:cmds:<service>` | stream | inbound command stream per service; servers consume via XREADGROUP, clients write via XADD |
+| `<key_prefix>:replies:<instance_id>` | stream | per-client reply stream; servers write replies via XADD, the client reads via XREAD; deleted by client `stop()` |
+| `<service>` | consumer group | competing-consumers pool name (lives inside the cmds stream's metadata; not a top-level key) |
 
 ## When to reach for this vs. `clamator-over-memory`
 
