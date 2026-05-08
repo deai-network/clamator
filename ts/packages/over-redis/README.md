@@ -10,14 +10,14 @@ npm install @clamator/over-redis @clamator/protocol ioredis
 
 ## Quickstart
 
-Define the contract once and import it from both the server and the client:
+Define the contract in TypeScript:
 
 ```typescript
-// arith-contract.ts
+// contracts/arith.ts
 import { z } from 'zod';
 import { defineContract, defineMethod, defineNotification } from '@clamator/protocol';
 
-export const arith = defineContract('arith', {
+export const arithContract = defineContract('arith', {
   add: defineMethod({
     params: z.object({ a: z.number(), b: z.number() }),
     result: z.object({ sum: z.number() }),
@@ -26,39 +26,46 @@ export const arith = defineContract('arith', {
 });
 ```
 
-Server:
+Run [`@clamator/codegen`](https://www.npmjs.com/package/@clamator/codegen) to emit a typed client and a service interface from that contract:
+
+```bash
+npx @clamator/codegen --src contracts --out-ts generated --ts-contract-import '../contracts/arith.js'
+```
+
+Server — implement the generated `ArithService` interface:
 
 ```typescript
 // server.ts
 import { RedisRpcServer } from '@clamator/over-redis';
-import { arith } from './arith-contract.js';
+import { arithContract } from './contracts/arith.js';
+import type { ArithService } from './generated/arith.js';
 
-const server = new RedisRpcServer({ keyPrefix: 'my-app' });
-
-server.registerService(arith, {
+const handlers: ArithService = {
   add: async ({ a, b }) => ({ sum: a + b }),
   ping: async () => {},
-});
+};
 
+const server = new RedisRpcServer({ keyPrefix: 'my-app' });
+server.registerService(arithContract, handlers);
 await server.start();
 process.on('SIGTERM', () => { void server.stop(); });
 ```
 
-Client:
+Client — call methods on the generated `ArithClient`:
 
 ```typescript
 // client.ts
 import { RedisRpcClient } from '@clamator/over-redis';
+import { ArithClient } from './generated/arith.js';
 
-const client = new RedisRpcClient({ keyPrefix: 'my-app' });
-await client.start();
+const transport = new RedisRpcClient({ keyPrefix: 'my-app' });
+await transport.start();
 
-const result = await client.call<{ a: number; b: number }, { sum: number }>(
-  'arith', 'add', { a: 2, b: 3 },
-);
+const arith = new ArithClient(transport);
+const result = await arith.add({ a: 2, b: 3 });
 console.log(result); // { sum: 5 }
 
-await client.stop();
+await transport.stop();
 ```
 
 By default the connection is built from `$REDIS_URL` (or `redis://localhost:6379`). Pass `redisUrl` for a different URL, or `redis` for a pre-built `ioredis` instance.
@@ -66,7 +73,7 @@ By default the connection is built from `$REDIS_URL` (or `redis://localhost:6379
 ## Key surface
 
 - `RedisRpcServer({ keyPrefix, redis?, redisUrl?, ... })` — `registerService(contract, handlers)`, `start()`, `stop()`.
-- `RedisRpcClient({ keyPrefix, redis?, redisUrl?, defaultTimeoutMs? })` — `start()`, `stop()`, `call<P, R>(service, method, params, opts?)`, `notify(service, method, params)`.
+- `RedisRpcClient({ keyPrefix, redis?, redisUrl?, defaultTimeoutMs? })` — `start()`, `stop()`. The instance is also a `ClamatorClient`, so it can be wrapped by a generated `*Client` proxy.
 
 ## When to reach for this vs. `@clamator/over-memory`
 

@@ -10,84 +10,62 @@ pip install clamator-over-memory clamator-protocol
 
 ## Quickstart
 
+Contracts are authored in TypeScript and the Python sibling is produced by [`@clamator/codegen`](https://www.npmjs.com/package/@clamator/codegen):
+
+```bash
+npx @clamator/codegen --src contracts --out-py generated
+```
+
+The emitted `generated/arith.py` exports Pydantic models, a typed `ArithClient`, an `ArithService` ABC, and the `arith_contract` `Contract` object. Wire server and client through a shared bus, talk via `ArithClient`:
+
 ```python
+# loopback.py
 import asyncio
-import pytest
-from pydantic import BaseModel
-from clamator_protocol import Contract, MethodEntry, RpcError
+
 from clamator_over_memory import MemoryBus, MemoryRpcServer, MemoryRpcClient
 
-
-class AddP(BaseModel):
-    a: int
-    b: int
-
-
-class AddR(BaseModel):
-    sum: int
-
-
-class PingP(BaseModel):
-    tag: str | None = None
-
-
-arith = Contract(
-    service="arith",
-    methods={
-        "add": MethodEntry(params_model=AddP, result_model=AddR, handler_attr="add"),
-        "ping": MethodEntry(params_model=PingP, result_model=None, handler_attr="ping"),
-    },
+from generated.arith import (
+    AddParams, AddResult, ArithClient, ArithService, arith_contract,
 )
 
 
-class Svc:
-    def __init__(self):
-        self.pinged = False
-    async def add(self, p: AddP) -> AddR:
-        return AddR(sum=p.a + p.b)
-    async def ping(self, p: PingP) -> None:
-        self.pinged = True
+class Arith(ArithService):
+    async def add(self, params: AddParams) -> AddResult:
+        return AddResult(sum=params.a + params.b)
 
 
-async def test_round_trip():
+async def main() -> None:
     bus = MemoryBus()
     server = MemoryRpcServer(bus=bus)
-    server.register_service(arith, Svc())
+    server.register_service(arith_contract, Arith())
     await server.start()
-    client = MemoryRpcClient(bus=bus)
-    await client.start()
-    r = await client.call("arith", "add", {"a": 2, "b": 3})
-    assert r == {"sum": 5}
-    await client.stop()
+
+    transport = MemoryRpcClient(bus=bus)
+    await transport.start()
+
+    arith = ArithClient(transport)
+    print(await arith.add(AddParams(a=2, b=3)))  # AddResult(sum=5)
+
+    await transport.stop()
     await server.stop()
+
+
+if __name__ == "__main__":
+    asyncio.run(main())
 ```
 
-(Verbatim from `py/packages/over-memory/tests/test_loopback.py:1-49`.)
-
-## Configuration
-
-`MemoryBus()` takes no arguments. The same instance is passed to the server and the client; that's the entire wiring.
-
-`MemoryRpcServer(bus=...)` and `MemoryRpcClient(bus=...)` accept:
-
-- `bus` — the shared `MemoryBus`.
-
-There are no timeouts, retries, or stream parameters — the loopback is synchronous within a single asyncio task.
+`MemoryBus()` takes no arguments and is the only wiring needed. The loopback is synchronous within a single asyncio task — no timeouts, retries, or stream parameters.
 
 ## Key surface
 
 - `MemoryBus()` — the connecting object passed to both server and client.
 - `MemoryRpcServer(bus=...)` — `register_service(contract, handler_obj)`, `start()`, `stop()`.
-- `MemoryRpcClient(bus=...)` — `start()`, `stop()`, `call(service, method, params)`, `notify(service, method, params)`.
+- `MemoryRpcClient(bus=...)` — `start()`, `stop()`. Wrap with a generated `*Client` proxy for typed calls.
 
 ## When to reach for this vs. `clamator-over-redis`
 
 - `clamator-over-memory` — tests, embedded scenarios, anything single-process.
 - [`clamator-over-redis`](https://pypi.org/project/clamator-over-redis/) — cross-process, cross-host, durable streams, production.
-
-## Codegen workflow
-
-The codegen tool is published as [`@clamator/codegen`](https://www.npmjs.com/package/@clamator/codegen) on npm regardless of which language consumes the output. To target Python, run the TS-side tool with `--out-py <dir>` and import the emitted modules from your Python package.
 
 ## Links
 
