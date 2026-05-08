@@ -91,6 +91,12 @@ What the client sees:
 - A client-side call that exceeds `default_timeout_ms` raises `clamator_protocol.ClamatorTransportError("call timeout")` from the transport layer, NOT `asyncio.TimeoutError`. The same exception class surfaces when no server is consuming the request stream — there is no distinct "no consumer" error.
 - Envelope-level parse and validation failures use the JSON-RPC reserved codes: `-32700` (parse error), `-32600` (invalid request), `-32601` (method not found), `-32602` (invalid params), `-32603` (internal error).
 
+## Authorization
+
+clamator has no authorization at the protocol or transport layer. Any process that can reach the underlying transport — a Redis instance for `over-redis`, the parent process for `over-memory` — can call any registered method or send any notification on any registered service.
+
+Apply caller-identity checks at the boundary: a gateway (typically an HTTP server in front of the typed proxy) enforces who-can-call-what before invoking the proxy method. For network-substrate transports, deploy the substrate behind a network you trust (TLS, AUTH, ACLs, private VPC).
+
 ## Links
 
 - Sibling (TypeScript): [`@clamator/protocol`](https://www.npmjs.com/package/@clamator/protocol)

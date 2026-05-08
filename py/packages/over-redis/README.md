@@ -87,6 +87,12 @@ Multiple `RedisRpcServer` instances sharing the same `key_prefix` form a competi
 
 **Per-service dispatch is serialized within a single server.** Each registered service has its own consumer loop that reads up to 16 messages per XREADGROUP poll and processes them one at a time (`await` per message; no `asyncio.create_task`). Multiple services registered on the same server run their own consumer loops concurrently, but two requests for the same service on the same server are not parallelized. To process one service's requests in parallel, run multiple `RedisRpcServer` instances sharing the same `key_prefix` — the consumer group splits work between them.
 
+## Authorization
+
+clamator has no authorization at the RPC layer. Any process that can read/write this Redis instance can call any registered method or send any notification — there is no caller identity in the wire envelope.
+
+Apply caller-identity checks at the boundary: a gateway (HTTP server, message-bus filter, etc.) enforces who-can-call-what before invoking the typed proxy. Deploy Redis behind a network you trust (TLS, AUTH, ACLs, private VPC); the transport assumes the substrate is already restricted to authenticated participants.
+
 ## Keys owned under `key_prefix`
 
 | Pattern | Type | Purpose |
