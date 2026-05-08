@@ -99,7 +99,7 @@ requires-dist = [
 
 [[package]]
 name = "clamator-over-memory"
-version = "0.1.4"
+version = "0.1.5"
 source = { editable = "packages/over-memory" }
 dependencies = [
     { name = "clamator-protocol" },
@@ -114,7 +114,7 @@ requires-dist = [
 
 [[package]]
 name = "clamator-over-redis"
-version = "0.1.4"
+version = "0.1.5"
 source = { editable = "packages/over-redis" }
 dependencies = [
     { name = "clamator-protocol" },
@@ -129,7 +129,7 @@ requires-dist = [
 
 [[package]]
 name = "clamator-protocol"
-version = "0.1.4"
+version = "0.1.5"
 source = { editable = "packages/protocol" }
 dependencies = [
     { name = "pydantic" },

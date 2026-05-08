@@ -1,6 +1,6 @@
 [project]
 name = "clamator-protocol"
-version = "0.1.4"
+version = "0.1.5"
 description = "Polyglot RPC protocol layer (pre-1.0; API may break in minor versions)."
 license = { text = "Apache-2.0" }
 readme = "README.md"
