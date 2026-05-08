@@ -30,17 +30,17 @@ class Arith(ArithService):
 
 
 async def test_round_trip_via_codegen_typed_proxy():
-    bus = MemoryBus()
-    server = MemoryRpcServer(bus=bus)
-    server.register_service(arith_contract, Arith())
+    bus = MemoryBus()  # in-process only; no external state — bus is garbage-collected with the process
+    server = MemoryRpcServer(bus=bus)  # no external connection; stop() unregisters from the bus without closing any resource
+    server.register_service(arith_contract, Arith())  # must precede start() — post-start registrations are silently ignored, never registered on the bus
     await server.start()
-    client = MemoryRpcClient(bus=bus)
+    client = MemoryRpcClient(bus=bus)  # default timeout 30 s (pass default_timeout_ms to override); no retry; timeouts not propagated to server
     await client.start()
     arith = ArithClient(client)
     r = await arith.add(AddParams(a=2, b=3))
     assert r.sum == 5  # noqa: PLR2004
     await client.stop()
-    await server.stop()
+    await server.stop()  # drains in-flight handlers up to grace_ms ms (default 5000), then stops transport
 ```
 
 (Verbatim from `py/packages/over-memory/tests/test_proxy_loopback.py:1-22`.)
@@ -52,6 +52,18 @@ async def test_round_trip_via_codegen_typed_proxy():
 - `MemoryBus()` — the connecting object passed to both server and client.
 - `MemoryRpcServer(bus=...)` — `register_service(contract, handler_obj)`, `start()`, `stop()`.
 - `MemoryRpcClient(bus=...)` — `start()`, `stop()`. Wrap with a generated `*Client` proxy for typed calls.
+
+## Worker-pool semantics
+
+N/A — this transport is a single-process loopback. Multiple `MemoryRpcServer` instances on the same `MemoryBus` do not form a competing-consumers pool because there is no shared substrate; each bus is in-memory to its constructing process. For cross-process worker-pool behavior, use `clamator-over-redis`.
+
+## Owned external state
+
+N/A — `MemoryBus` owns no external state. There are no Redis keys, no streams, no files, no sockets. The bus is garbage-collected with the process.
+
+## Connection ownership
+
+N/A — there is no external connection to own. `MemoryRpcServer` and `MemoryRpcClient` share a `MemoryBus` that lives entirely in-process; `stop()` releases its references without closing any external resource.
 
 ## When to reach for this vs. `clamator-over-redis`
 
