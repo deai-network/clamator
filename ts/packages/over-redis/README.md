@@ -13,7 +13,6 @@ npm install @clamator/over-redis @clamator/protocol ioredis
 Define the contract in TypeScript:
 
 ```typescript
-// contracts/arith.ts
 import { z } from 'zod';
 import { defineContract, defineMethod, defineNotification } from '@clamator/protocol';
 
@@ -26,47 +25,61 @@ export const arithContract = defineContract('arith', {
 });
 ```
 
+(Verbatim from `ts/packages/over-redis/tests/contracts/arith.ts:1-10`.)
+
 Run [`@clamator/codegen`](https://www.npmjs.com/package/@clamator/codegen) to emit a typed client and a service interface from that contract:
 
 ```bash
 npx @clamator/codegen --src contracts --out-ts generated --ts-contract-import '../contracts/arith.js'
 ```
 
-Server — implement the generated `ArithService` interface:
+The following test demonstrates both the server and client sides round-trip together using the generated `ArithClient` proxy and `ArithService` interface:
 
 ```typescript
-// server.ts
-import { RedisRpcServer } from '@clamator/over-redis';
+import { describe, it, expect, beforeAll, afterEach } from 'vitest';
+import IORedis from 'ioredis';
+import { RedisRpcServer, RedisRpcClient } from '../src/index.js';
 import { arithContract } from './contracts/arith.js';
-import type { ArithService } from './generated/arith.js';
+import { ArithClient, type ArithService } from './generated/arith.js';
 
-const handlers: ArithService = {
-  add: async ({ a, b }) => ({ sum: a + b }),
-  ping: async () => {},
-};
+const REDIS_URL = process.env.REDIS_URL;
 
-const server = new RedisRpcServer({ keyPrefix: 'my-app' });
-server.registerService(arithContract, handlers);
-await server.start();
-process.on('SIGTERM', () => { void server.stop(); });
+describe.skipIf(!REDIS_URL)('redis round-trip via codegen typed proxy', () => {
+  let prefix: string;
+
+  afterEach(async () => {
+    if (!REDIS_URL) return;
+    const r = new IORedis(REDIS_URL!);
+    const keys = await r.keys(`${prefix}:*`);
+    if (keys.length) await r.del(...keys);
+    await r.quit();
+  });
+
+  it('round-trips a successful call through ArithClient', async () => {
+    prefix = `clam-test-${Math.random().toString(36).slice(2, 8)}`;
+    const sredis = new IORedis(REDIS_URL!);
+    const credis = new IORedis(REDIS_URL!);
+    const server = new RedisRpcServer({ redis: sredis, keyPrefix: prefix });
+    const handlers: ArithService = {
+      add: async ({ a, b }) => ({ sum: a + b }),
+      ping: async (_params) => {},
+    };
+    server.registerService(arithContract, handlers);
+    await server.start();
+    const client = new RedisRpcClient({ redis: credis, keyPrefix: prefix, defaultTimeoutMs: 3000 });
+    await client.start();
+    const arith = new ArithClient(client);
+    const r = await arith.add({ a: 2, b: 3 });
+    expect(r).toEqual({ sum: 5 });
+    await client.stop();
+    await server.stop();
+    await sredis.quit();
+    await credis.quit();
+  });
+});
 ```
 
-Client — call methods on the generated `ArithClient`:
-
-```typescript
-// client.ts
-import { RedisRpcClient } from '@clamator/over-redis';
-import { ArithClient } from './generated/arith.js';
-
-const transport = new RedisRpcClient({ keyPrefix: 'my-app' });
-await transport.start();
-
-const arith = new ArithClient(transport);
-const result = await arith.add({ a: 2, b: 3 });
-console.log(result); // { sum: 5 }
-
-await transport.stop();
-```
+(Verbatim from `ts/packages/over-redis/tests/proxy-round-trip.test.ts:1-41`.)
 
 By default the connection is built from `$REDIS_URL` (or `redis://localhost:6379`). Pass `redisUrl` for a different URL, or `redis` for a pre-built `ioredis` instance.
 

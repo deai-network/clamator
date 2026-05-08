@@ -18,17 +18,13 @@ npx @clamator/codegen --src contracts --out-py generated
 
 The emitted `generated/arith.py` exports Pydantic models, a typed `ArithClient`, an `ArithService` ABC, and the `arith_contract` `Contract` object.
 
-Server — subclass the generated `ArithService` ABC:
+The following test demonstrates both the server and client sides round-trip together using the generated `ArithClient` proxy and `ArithService` ABC:
 
 ```python
-# server.py
-import asyncio
-
-from clamator_over_redis import RedisRpcServer
-
-from generated.arith import (
-    AddParams, AddResult, PingParams, ArithService, arith_contract,
-)
+import pytest
+from redis.asyncio import Redis
+from clamator_over_redis import RedisRpcServer, RedisRpcClient
+from .generated.arith import ArithClient, ArithService, arith_contract, AddParams, AddResult, PingParams
 
 
 class Arith(ArithService):
@@ -36,45 +32,28 @@ class Arith(ArithService):
         return AddResult(sum=params.a + params.b)
 
     async def ping(self, params: PingParams) -> None:
-        pass
+        return None
 
 
-async def main() -> None:
-    server = RedisRpcServer(key_prefix="my-app")
+@pytest.mark.asyncio
+async def test_round_trip_via_codegen_typed_proxy(redis_url, key_prefix, cleanup):
+    rs = Redis.from_url(redis_url)
+    rc = Redis.from_url(redis_url)
+    server = RedisRpcServer(redis=rs, key_prefix=key_prefix)
     server.register_service(arith_contract, Arith())
     await server.start()
-    await asyncio.Event().wait()  # serve until cancelled
-
-
-if __name__ == "__main__":
-    asyncio.run(main())
+    client = RedisRpcClient(redis=rc, key_prefix=key_prefix, default_timeout_ms=3000)
+    await client.start()
+    arith = ArithClient(client)
+    r = await arith.add(AddParams(a=2, b=3))
+    assert r.sum == 5
+    await client.stop()
+    await server.stop()
+    await rs.aclose()
+    await rc.aclose()
 ```
 
-Client — call methods on the generated `ArithClient`:
-
-```python
-# client.py
-import asyncio
-
-from clamator_over_redis import RedisRpcClient
-
-from generated.arith import ArithClient, AddParams
-
-
-async def main() -> None:
-    transport = RedisRpcClient(key_prefix="my-app")
-    await transport.start()
-
-    arith = ArithClient(transport)
-    result = await arith.add(AddParams(a=2, b=3))
-    print(result)  # AddResult(sum=5)
-
-    await transport.stop()
-
-
-if __name__ == "__main__":
-    asyncio.run(main())
-```
+(Verbatim from `py/packages/over-redis/tests/test_proxy_round_trip.py:1-30`.)
 
 By default the connection is built from `$REDIS_URL` (or `redis://localhost:6379`). Pass `redis_url=` for a different URL, or `redis=` for a pre-built `redis.asyncio.Redis` instance.
 
