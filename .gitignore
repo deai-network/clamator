@@ -10,6 +10,8 @@ ts/packages/*/.tsbuildinfo
 ts/packages/*/lib/
 tests/interop/drivers/ts/dist/
 tests/interop/drivers/ts/.tsbuildinfo
+tests/interop/lib/dist/
+tests/interop/lib/.tsbuildinfo
 
 # Python
 __pycache__/
