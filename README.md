@@ -35,10 +35,10 @@ make interop   # cross-lang interop tests (requires docker)
 
 | npm | PyPI |
 |---|---|
-| `@clamator/protocol` | `clamator-protocol` |
-| `@clamator/over-memory` | `clamator-over-memory` |
-| `@clamator/over-redis` | `clamator-over-redis` |
-| `@clamator/codegen` | — |
+| [`@clamator/protocol`](ts/packages/protocol) | [`clamator-protocol`](py/packages/protocol) |
+| [`@clamator/over-memory`](ts/packages/over-memory) | [`clamator-over-memory`](py/packages/over-memory) |
+| [`@clamator/over-redis`](ts/packages/over-redis) | [`clamator-over-redis`](py/packages/over-redis) |
+| [`@clamator/codegen`](ts/packages/codegen) | — |
 
 ## Release
 
