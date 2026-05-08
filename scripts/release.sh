@@ -52,12 +52,20 @@ if [[ "$SUBCOMMAND" == "publish" ]]; then
   done
 
   echo "==> PyPI publish (dep order: protocol, over-memory, over-redis)"
+  # uv build from a workspace member writes artifacts to the workspace-root
+  # py/dist/, NOT to <pkg>/dist/. Build all once, then upload per-pkg in dep order.
+  rm -rf "$REPO_ROOT/py/dist"
+  ( cd "$REPO_ROOT/py" && uv build --all )
+
+  declare -A PY_PYPI_NAMES=(
+    [py/packages/protocol]=clamator_protocol
+    [py/packages/over-memory]=clamator_over_memory
+    [py/packages/over-redis]=clamator_over_redis
+  )
   for pkg in "${PY_PKGS[@]}"; do
-    pushd "$REPO_ROOT/$pkg" >/dev/null
-    rm -rf dist
-    uv build
-    twine upload dist/*
-    popd >/dev/null
+    name="${PY_PYPI_NAMES[$pkg]}"
+    echo "  uploading $name@$VERSION ..."
+    twine upload "$REPO_ROOT/py/dist/${name}-${VERSION}"*
   done
 
   echo "==> Done. Verify with:"
