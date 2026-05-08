@@ -12,7 +12,7 @@ dev-dependencies = [
 [tool.ruff]
 line-length = 100
 target-version = "py311"
-extend-exclude = [".venv", "build", "dist"]
+extend-exclude = [".venv", "build", "dist", "**/tests/generated"]
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "B", "UP", "PL"]
