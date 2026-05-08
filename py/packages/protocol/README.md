@@ -44,7 +44,15 @@ The single `methods` dict holds both methods and notifications. A `MethodEntry` 
 
 ## Codegen workflow
 
-clamator's codegen tool is published to npm (`@clamator/codegen`) regardless of which language consumes the output. Python users run the TS-side tool against their Zod contract source and consume the emitted Python wrappers from their package. See [`@clamator/codegen`](https://www.npmjs.com/package/@clamator/codegen) for the CLI invocation.
+clamator's codegen is an npm package (`@clamator/codegen`) regardless of which language consumes the output. For a Py-only project, run the CLI against your Zod contract source and emit the Python wrappers into your package's source tree:
+
+```bash
+npx @clamator/codegen --src contracts --out-py src/myapp/_generated
+```
+
+Commit the emitted files alongside your code — they are vendored generated artifacts. Re-run codegen on contract changes; for drift detection, also pass `--manifest` and diff the manifest in CI (see [`@clamator/codegen`](https://www.npmjs.com/package/@clamator/codegen) for the full pattern).
+
+The Python package then imports `AddParams`, `AddResult`, `ArithClient`, `ArithService`, and `arith_contract` from `myapp._generated.arith`.
 
 ## Method or notification?
 
