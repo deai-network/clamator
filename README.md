@@ -6,7 +6,13 @@
 
 Polyglot TS↔Py RPC over pluggable transports. JSON-RPC 2.0 envelopes; Zod as contract source of truth; codegen for Python.
 
-clamator lets a TypeScript process and a Python process call each other's methods over JSON-RPC 2.0, with Zod as the single source of truth for the contract and Python wrappers generated from it. One contract definition keeps types and validation in lockstep across both languages by construction, and the transport is swappable — an in-process loopback for tests, Redis streams for production. Reach for clamator when a TS service and a Py service share a contract surface and the alternative is hand-rolling request/response shapes twice.
+clamator exists because no off-the-shelf RPC stack covers a particular intersection: TypeScript and Python services in the same system, communicating over a queue or stream substrate (Redis Streams, NATS, or similar), with typed contracts authored once and shared by both sides — no separate IDL, no parallel transport bolted on just to use the queue.
+
+The popular options each force a tradeoff. gRPC is fully polyglot but locks you to HTTP/2 and a separate `.proto` toolchain. tRPC and ts-rest give the best Zod-driven typed DX a TypeScript-only system can ask for, but they don't cross to Python. OpenAPI generators cross languages but force a REST shape onto what is really RPC. Cap'n Proto is fast and polyglot but ships its own IDL and a less idiomatic developer surface. Hand-rolled JSON-RPC over Redis or NATS works for a while, but with no contract layer it leaves you re-typing every method by hand on both sides and re-implementing worker-pool semantics each time.
+
+clamator's combination is what those tools won't combine: Zod as the single source of truth (so the TypeScript side keeps its idiomatic DX), JSON-RPC 2.0 on the wire (text, debuggable, language-neutral, mature), Zod-to-Pydantic codegen (so the Python side gets the same shapes without re-authoring them), and a pluggable, stream-based transport (so Redis Streams, an in-process loopback, or future NATS/AMQP adapters all sit behind the same `Transport` interface). The Redis adapter ships with consumer-group worker-pool semantics already wired up — something every JSON-RPC-over-Redis project ends up reimplementing.
+
+Reach for clamator when a TypeScript service and a Python service share a contract surface, the substrate between them is already a queue or stream, and the alternative is either adopting an HTTP-locked RPC framework alongside the queue you already have, or hand-rolling JSON-RPC envelopes and worker-pool semantics in two languages.
 
 > **Pre-1.0:** API stability not guaranteed. Minor versions may break.
 
