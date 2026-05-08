@@ -1,7 +1,14 @@
-import pytest
+from clamator_over_redis import RedisRpcClient, RedisRpcServer
 from redis.asyncio import Redis
-from clamator_over_redis import RedisRpcServer, RedisRpcClient
-from .generated.arith import ArithClient, ArithService, arith_contract, AddParams, AddResult, PingParams
+
+from .generated.arith import (
+    AddParams,
+    AddResult,
+    ArithClient,
+    ArithService,
+    PingParams,
+    arith_contract,
+)
 
 
 class Arith(ArithService):
@@ -12,7 +19,6 @@ class Arith(ArithService):
         return None
 
 
-@pytest.mark.asyncio
 async def test_round_trip_via_codegen_typed_proxy(redis_url, key_prefix, cleanup):
     rs = Redis.from_url(redis_url)
     rc = Redis.from_url(redis_url)
@@ -23,7 +29,7 @@ async def test_round_trip_via_codegen_typed_proxy(redis_url, key_prefix, cleanup
     await client.start()
     arith = ArithClient(client)
     r = await arith.add(AddParams(a=2, b=3))
-    assert r.sum == 5
+    assert r.sum == 5  # noqa: PLR2004
     await client.stop()
     await server.stop()
     await rs.aclose()
