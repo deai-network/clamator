@@ -205,6 +205,21 @@ This drift detection is for **your** contract source vs. **your** committed gene
 
 The diff-against-committed pattern works because **codegen output is deterministic**: the AUTO-GENERATED header carries the codegen version (no timestamp), and the emitted file content is a function of the contract IR. Identical contracts on the same codegen version produce byte-identical output across runs.
 
+## Monorepo integration
+
+A polyglot monorepo with both TS and Py consumers of the same contract benefits from a single canonical location for the contract source and one CI pipeline that emits both languages' wrappers.
+
+**Recommended layout.**
+
+- Contract source lives in a dedicated TS package (e.g., `packages/<name>-contracts/src/<service>.ts`). That package depends on `zod` and `@clamator/protocol` (both peer-deps if it's library-shaped, both regular deps if it's an internal-only package).
+- The contracts package owns a `codegen` npm script that runs the CLI with `--src` pointing at its own contract sources, `--out-ts` pointing at the package's `dist/generated/` (or wherever the TS consumers want them), `--out-py` pointing at the Python consumer's source tree (e.g., `packages/<name>-engine/src/<name>_engine/_generated/`), and `--manifest` for the drift-detection workflow.
+- Python consumers import the emitted `_generated/<service>.py` files from their package source as if they were any other Python module. They do not need `npm` available at runtime — only the committed generated artifacts.
+- Per the "Drift detection via the manifest" section above, CI runs the codegen script and diffs the manifest against the committed copy on every change.
+
+**Implication for Python-only consumers.** Codegen runs in Node, so a Python-only deployment still needs Node available wherever codegen runs (typically a developer machine or CI runner). The committed generated `.py` files have no Node dependency at runtime — Python installs and consumes them the same way as any vendored library code.
+
+**Avoid running codegen in `pip install` / `uv build`.** The generated outputs are committed artifacts; treat regeneration as a contract-update event, not a per-install step. CI's drift-detection diff catches stale outputs before they merge.
+
 ## Browser consumers
 
 The source contract file (the one calling `defineContract(...)`) and the generated TS wrapper both import `@clamator/protocol` at runtime. `@clamator/protocol` uses Node-only APIs (`node:crypto`) and cannot be loaded in a browser bundle.
