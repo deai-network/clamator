@@ -1,22 +1,12 @@
-from clamator_over_memory import MemoryBus, MemoryRpcClient, MemoryRpcServer
+from clamator_over_memory import MemoryBus
 
-from .generated.arith import AddParams, AddResult, ArithClient, ArithService, arith_contract
-
-
-class Arith(ArithService):
-    async def add(self, params: AddParams) -> AddResult:
-        return AddResult(sum=params.a + params.b)
+from .client import call_arith
+from .server import build_arith_server
 
 
 async def test_round_trip_via_codegen_typed_proxy():
     bus = MemoryBus()
-    server = MemoryRpcServer(bus=bus)
-    server.register_service(arith_contract, Arith())
-    await server.start()
-    client = MemoryRpcClient(bus=bus)
-    await client.start()
-    arith = ArithClient(client)
-    r = await arith.add(AddParams(a=2, b=3))
+    server = await build_arith_server(bus)
+    r = await call_arith(bus)
     assert r.sum == 5  # noqa: PLR2004
-    await client.stop()
-    await server.stop()
+    await server.stop()  # drains in-flight handlers up to grace_ms ms (default 5000), then stops transport  # noqa: E501

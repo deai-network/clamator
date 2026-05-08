@@ -16,12 +16,14 @@ Contracts are authored in TypeScript and the Python sibling is produced by [`@cl
 npx @clamator/codegen --src contracts --out-py generated
 ```
 
-The emitted `generated/arith.py` exports Pydantic models, a typed `ArithClient`, an `ArithService` ABC, and the `arith_contract` `Contract` object. Wire server and client through a shared bus, talk via `ArithClient`:
+The emitted `generated/arith.py` exports Pydantic models, a typed `ArithClient`, an `ArithService` ABC, and the `arith_contract` `Contract` object. Wire server and client through a shared bus, talk via `ArithClient`.
+
+Server-side — register handlers and start:
 
 ```python
-from clamator_over_memory import MemoryBus, MemoryRpcClient, MemoryRpcServer
+from clamator_over_memory import MemoryBus, MemoryRpcServer
 
-from .generated.arith import AddParams, AddResult, ArithClient, ArithService, arith_contract
+from .generated.arith import AddParams, AddResult, ArithService, arith_contract
 
 
 class Arith(ArithService):
@@ -29,21 +31,33 @@ class Arith(ArithService):
         return AddResult(sum=params.a + params.b)
 
 
-async def test_round_trip_via_codegen_typed_proxy():
-    bus = MemoryBus()  # in-process only; no external state — bus is garbage-collected with the process
-    server = MemoryRpcServer(bus=bus)  # no external connection; stop() unregisters from the bus without closing any resource
-    server.register_service(arith_contract, Arith())  # must precede start() — post-start registrations are silently ignored, never registered on the bus
+async def build_arith_server(bus: MemoryBus) -> MemoryRpcServer:
+    server = MemoryRpcServer(bus=bus)  # no external connection; stop() unregisters from the bus without closing any resource  # noqa: E501
+    server.register_service(arith_contract, Arith())  # must precede start() — post-start registrations are silently ignored, never registered on the bus  # noqa: E501
     await server.start()
-    client = MemoryRpcClient(bus=bus)  # default timeout 30 s (pass default_timeout_ms to override); no retry; timeouts not propagated to server
+    return server
+```
+
+(Verbatim from `py/packages/over-memory/tests/server.py:1-15`.)
+
+Client-side — call the typed proxy:
+
+```python
+from clamator_over_memory import MemoryBus, MemoryRpcClient
+
+from .generated.arith import AddParams, AddResult, ArithClient
+
+
+async def call_arith(bus: MemoryBus) -> AddResult:
+    client = MemoryRpcClient(bus=bus)  # default timeout 30 s (pass default_timeout_ms to override); no retry; timeouts not propagated to server  # noqa: E501
     await client.start()
     arith = ArithClient(client)
     r = await arith.add(AddParams(a=2, b=3))
-    assert r.sum == 5  # noqa: PLR2004
     await client.stop()
-    await server.stop()  # drains in-flight handlers up to grace_ms ms (default 5000), then stops transport
+    return r
 ```
 
-(Verbatim from `py/packages/over-memory/tests/test_proxy_loopback.py:1-22`.)
+(Verbatim from `py/packages/over-memory/tests/client.py:1-12`.)
 
 `MemoryBus()` takes no arguments and is the only wiring needed. The loopback is synchronous within a single asyncio task — no timeouts, retries, or stream parameters.
 
