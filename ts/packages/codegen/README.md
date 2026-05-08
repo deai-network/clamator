@@ -201,6 +201,8 @@ The interop suite uses this exact pattern (regenerate twice into separate tmp di
 
 This drift detection is for **your** contract source vs. **your** committed generated wrappers. clamator framework version drift across the seven published packages is impossible by construction: every package is released in lockstep at the same `X.Y.Z`, and the release-verification workflow runs the cross-language interop suite on every tag (see [`@clamator/protocol`](https://www.npmjs.com/package/@clamator/protocol) for the version-compatibility statement). Pin all clamator packages to one `X.Y.Z` on both sides and framework drift cannot occur.
 
+The diff-against-committed pattern works because **codegen output is deterministic**: the AUTO-GENERATED header carries the codegen version (no timestamp), and the emitted file content is a function of the contract IR. Identical contracts on the same codegen version produce byte-identical output across runs.
+
 ## Browser consumers
 
 The source contract file (the one calling `defineContract(...)`) and the generated TS wrapper both import `@clamator/protocol` at runtime. `@clamator/protocol` uses Node-only APIs (`node:crypto`) and cannot be loaded in a browser bundle.

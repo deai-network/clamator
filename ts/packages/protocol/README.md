@@ -67,7 +67,7 @@ If you would otherwise add a method that returns nothing solely to confirm deliv
 
 `defineContract` / `defineMethod` / `defineNotification` are first-class — you do not need to run codegen to use them. Codegen exists to keep TS and Py contracts in lockstep when both languages consume the same wire-side service. If your contract is dynamic (e.g., constructed at runtime from a registry of handler functions), or if you have only one language side, build the contract directly with `defineContract(...)` and pass it to `registerService(contract, handlers)` — the dispatcher only uses the contract's `methods[name].params` / `result` Zod schemas and looks up handlers in the `handlers` object literal you pass.
 
-Codegen-emitted clients and hand-built service registrations interoperate freely; the choice is purely about authoring ergonomics on the side that consumes a typed proxy.
+Codegen-emitted clients and hand-built service registrations interoperate freely; the choice is purely about authoring ergonomics on the side that consumes a typed proxy. **You can mix both on a single server**: register codegen-emitted services and hand-built services in the same startup sequence; each `registerService(contract, handlers)` call is independent and the service-name uniqueness check is the only constraint.
 
 ## Validation pipeline
 
@@ -79,6 +79,16 @@ Server-side handlers receive **parsed values from the contract's Zod schemas**, 
 4. **Result validation.** If the method has a `result` schema, the return value is run through `methodDef.result.parse(result)`. A handler returning the wrong shape is reported to the client as `RpcError({ code: -32603, message: "Result validation failed", data: { ... } })` — there is no automatic coercion. Notifications skip result validation.
 
 Handlers are insulated from wire-format details: if the dispatch reaches your code, the params are valid; if your return value fails validation, the client sees a structured error rather than a corrupted reply.
+
+**Notification handler exceptions are silently swallowed.** The dispatcher catches `RpcError` and any other thrown error in the same `try/catch` block, but returns `null` on the notification path (no response envelope to write). There is no built-in logging hook — if your notification handlers can fail in interesting ways, wrap the handler body with your own `try/catch` + observability so the failure isn't invisible.
+
+## Wire-format and serialization
+
+The wire format is JSON. Zod's parse runs on receipt of params and result envelopes; type fidelity is whatever Zod can express. JSON's native types (string, number, boolean, null, array, object) round-trip without configuration. For non-primitive types (`Date`, `bigint`, custom classes like MongoDB `ObjectId`), define matching transforms on both sides — Zod `.transform(...)` on TS, Pydantic field serializers / `model_serializer` on Py. The cross-language interop suite verifies primitive-type round-trip on every release; custom types are the integrator's responsibility.
+
+## Observability
+
+clamator provides no built-in logging, metrics, or tracing hooks. The dispatcher does not log handler invocations, errors, or timings — your handler body is the right place for instrumentation. Wrap each handler with your own structured logging or OpenTelemetry spans; the typed `params` and the handler's return value are the natural span attributes.
 
 ## Errors
 

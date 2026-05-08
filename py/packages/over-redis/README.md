@@ -70,7 +70,9 @@ A single server can host multiple services. Call `register_service(contract, han
 
 By default the connection is built from `$REDIS_URL` (or `redis://localhost:6379`). Pass `redis_url=` for a different URL, or `redis=` for a pre-built `redis.asyncio.Redis` instance.
 
-`key_prefix` is used as a literal Redis key prefix — clamator does not parse it. Any string Redis accepts as a key works, including slashes, colons, and embedded path-like separators (e.g., `my-app/tenant-42`).
+`key_prefix` is used as a literal Redis key prefix — clamator does not parse it. Any string Redis accepts as a key works, including slashes, colons, and embedded path-like separators (e.g., `my-app/tenant-42`). Pick a `key_prefix` that doesn't collide with non-clamator usage of the same Redis instance: clamator owns only keys under its prefix (see "Keys owned" below), but a sibling app writing to those same keys would corrupt clamator's streams (and vice versa).
+
+**Consumer-group cleanup on server crash.** clamator never calls `XGROUP DELCONSUMER`. A crashed or stopped server leaves its `<service>:<instance_id>` consumer entry in the group with whatever pending entries it had unacknowledged (those get reclaimed by `XAUTOCLAIM` after `consumer_claim_idle_ms`). The consumer entry itself persists. Long-lived deployments with frequent restarts accumulate dead-consumer entries; periodic operator cleanup via `XINFO CONSUMERS <stream> <group>` + `XGROUP DELCONSUMER` for entries with idle time well past your reclaim window is recommended.
 
 Sharing one injected `redis` instance across multiple `RedisRpcServer` and `RedisRpcClient` instances — and across your application's other Redis usage on the same instance — is safe. Each server/client manages its own subscription internally; XREADGROUP and reply-stream XREAD calls use short polling blocks, so non-blocking ops (XADD, XACK, XAUTOCLAIM) on the same connection interleave without deadlock.
 

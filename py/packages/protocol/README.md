@@ -46,7 +46,7 @@ The single `methods` dict holds both methods and notifications. A `MethodEntry` 
 
 The `Contract` and `MethodEntry` classes are first-class — you do not need to run codegen to use them. The "Defining a contract" snippet above is itself hand-built. Codegen exists to keep TS and Py contracts in lockstep when both languages consume the same wire-side service; if you only have a Py-side service, or if you need to build the contract dynamically at runtime (e.g., from a registry of handler functions keyed by command type), build the `Contract` by hand.
 
-`register_service(contract, handler_instance)` accepts any `Contract` regardless of how it was built. The dispatcher calls `getattr(handler_instance, method_entry.handler_attr)(params)` for each request — the handler instance doesn't need to subclass any particular ABC, only to expose the right async attributes. Codegen-emitted contracts and hand-built contracts are interchangeable at the dispatch layer; the choice is purely about authoring ergonomics.
+`register_service(contract, handler_instance)` accepts any `Contract` regardless of how it was built. The dispatcher calls `getattr(handler_instance, method_entry.handler_attr)(params)` for each request — the handler instance doesn't need to subclass any particular ABC, only to expose the right async attributes. Codegen-emitted contracts and hand-built contracts are interchangeable at the dispatch layer; the choice is purely about authoring ergonomics. **You can mix both on a single server**: register codegen-emitted services and hand-built services in the same startup sequence; each call is independent and the service-name uniqueness check is the only constraint.
 
 ## Codegen workflow
 
@@ -85,6 +85,16 @@ Server-side handlers receive **already-validated Pydantic instances**, not raw d
 4. **Result validation.** If the method has a `result_model`, the return value is run through `result_model.model_validate(...)`. A handler returning the wrong shape is reported to the client as `RpcError(-32603, "Result validation failed", data={"errors": ...})` — there is no automatic coercion. Notifications skip result validation.
 
 Handlers are insulated from wire-format details: if the dispatch reaches your code, the params are valid; if your return value fails validation, the client sees a structured error rather than a corrupted reply.
+
+**Notification handler exceptions are silently swallowed.** The dispatcher catches `RpcError` and any other exception in the same `try/except` block, but returns `None` on the notification path (no response envelope to write). There is no built-in logging hook — if your notification handlers can fail in interesting ways, wrap the handler body with your own `try/except` + observability so the failure isn't invisible.
+
+## Wire-format and serialization
+
+The wire format is JSON. Pydantic v2 default serializers apply when params and results cross the wire: `datetime` → ISO 8601 string, `Decimal` → string, `bytes` → base64-encoded string, `UUID` → canonical hex. Native JSON types (string, number, boolean, null, list, dict) round-trip without configuration. For non-primitive custom types (e.g., MongoDB `ObjectId`), define matching serializers on both sides — Pydantic field serializers / `model_serializer` on Py, Zod `.transform(...)` on TS. The cross-language interop suite verifies primitive-type round-trip on every release; custom types are the integrator's responsibility.
+
+## Observability
+
+clamator provides no built-in logging, metrics, or tracing hooks. The dispatcher does not log handler invocations, errors, or timings — your handler body is the right place for instrumentation. Wrap each handler with your own structured logging or OpenTelemetry spans; the typed `params` and the handler's return value are the natural span attributes.
 
 ## Errors
 
