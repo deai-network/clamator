@@ -42,6 +42,12 @@ The single `methods` dict holds both methods and notifications. A `MethodEntry` 
 - `ClamatorProtocolError`, `ClamatorTransportError` — distinguishable error classes for protocol-level vs. transport-level failures.
 - `Transport`, `Dispatcher` — interfaces a custom transport adapter implements.
 
+## Hand-built contracts
+
+The `Contract` and `MethodEntry` classes are first-class — you do not need to run codegen to use them. The "Defining a contract" snippet above is itself hand-built. Codegen exists to keep TS and Py contracts in lockstep when both languages consume the same wire-side service; if you only have a Py-side service, or if you need to build the contract dynamically at runtime (e.g., from a registry of handler functions keyed by command type), build the `Contract` by hand.
+
+`register_service(contract, handler_instance)` accepts any `Contract` regardless of how it was built. The dispatcher calls `getattr(handler_instance, method_entry.handler_attr)(params)` for each request — the handler instance doesn't need to subclass any particular ABC, only to expose the right async attributes. Codegen-emitted contracts and hand-built contracts are interchangeable at the dispatch layer; the choice is purely about authoring ergonomics.
+
 ## Codegen workflow
 
 clamator's codegen is an npm package (`@clamator/codegen`) regardless of which language consumes the output. For a Py-only project, run the CLI against your Zod contract source and emit the Python wrappers into your package's source tree:
@@ -62,6 +68,17 @@ Both methods and notifications send a request envelope; only methods produce a r
 - **Use a notification** when the caller is doing fire-and-forget work where neither success/failure nor a return value matters in the moment — telemetry, cache-busting, status pings. Notifications have no request id and produce no response; the caller cannot tell whether the handler ran, succeeded, or threw.
 
 If you would otherwise add a method that returns nothing solely to confirm delivery, prefer a method returning an empty Pydantic model over a notification — the response envelope is the confirmation. Pick a notification only when "did this run?" is genuinely not a question the caller will ever ask.
+
+## Validation pipeline
+
+Server-side handlers receive **already-validated Pydantic instances**, not raw dicts. The dispatcher does the work in this order on every incoming envelope:
+
+1. **Params validation.** The wire dict goes through `method_entry.params_model.model_validate(...)`. Failures produce `RpcError(-32602, "Invalid params", data={"errors": <ValidationError details>})` and the request is rejected before the handler runs. Notifications with bad params are silently dropped.
+2. **Handler dispatch.** The dispatcher calls `getattr(handler_instance, handler_attr)(params)` — passing the validated `params_model` instance. Handlers declare their type as the model class (e.g., `async def add(self, params: AddParams) -> AddResult`) and will never see a `dict` at runtime.
+3. **Handler exceptions.** A handler that raises `RpcError(code, message, data)` produces a response with that exact code/message/data. Any other exception is wrapped as `RpcError(-32603, "Internal error", data={...exception details})`.
+4. **Result validation.** If the method has a `result_model`, the return value is run through `result_model.model_validate(...)`. A handler returning the wrong shape is reported to the client as `RpcError(-32603, "Result validation failed", data={"errors": ...})` — there is no automatic coercion. Notifications skip result validation.
+
+Handlers are insulated from wire-format details: if the dispatch reaches your code, the params are valid; if your return value fails validation, the client sees a structured error rather than a corrupted reply.
 
 ## Errors
 

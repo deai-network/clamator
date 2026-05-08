@@ -51,6 +51,23 @@ Both methods and notifications send a request envelope; only methods produce a r
 
 If you would otherwise add a method that returns nothing solely to confirm delivery, prefer a method returning `z.object({})` over a notification — the response envelope is the confirmation. Pick a notification only when "did this run?" is genuinely not a question the caller will ever ask.
 
+## Hand-built contracts
+
+`defineContract` / `defineMethod` / `defineNotification` are first-class — you do not need to run codegen to use them. Codegen exists to keep TS and Py contracts in lockstep when both languages consume the same wire-side service. If your contract is dynamic (e.g., constructed at runtime from a registry of handler functions), or if you have only one language side, build the contract directly with `defineContract(...)` and pass it to `registerService(contract, handlers)` — the dispatcher only uses the contract's `methods[name].params` / `result` Zod schemas and looks up handlers in the `handlers` object literal you pass.
+
+Codegen-emitted clients and hand-built service registrations interoperate freely; the choice is purely about authoring ergonomics on the side that consumes a typed proxy.
+
+## Validation pipeline
+
+Server-side handlers receive **parsed values from the contract's Zod schemas**, not raw dicts. The dispatcher does the work in this order on every incoming envelope:
+
+1. **Params validation.** The wire dict goes through `methodDef.params.parse(env.params)`. Failures produce `RpcError({ code: -32602, message: "Invalid params", data: { ... } })` and the request is rejected before the handler runs. Notifications with bad params are silently dropped.
+2. **Handler dispatch.** The dispatcher calls `entry.handlers[methodName](parsed)` — passing the Zod-validated value. Handlers declare their parameter type as `z.infer<typeof contract.methods.<m>.params>` (or use the typed `<Service>Service` interface from codegen).
+3. **Handler exceptions.** A handler that throws `new RpcError({ code, message, data })` produces a response with that exact code/message/data. Any other thrown error is wrapped as `RpcError({ code: -32603, message: "Internal error", data: { ... } })`.
+4. **Result validation.** If the method has a `result` schema, the return value is run through `methodDef.result.parse(result)`. A handler returning the wrong shape is reported to the client as `RpcError({ code: -32603, message: "Result validation failed", data: { ... } })` — there is no automatic coercion. Notifications skip result validation.
+
+Handlers are insulated from wire-format details: if the dispatch reaches your code, the params are valid; if your return value fails validation, the client sees a structured error rather than a corrupted reply.
+
 ## Errors
 
 Throw `RpcError` from a handler to surface a structured JSON-RPC error to the caller. The constructor takes a `code`, a `message`, and an optional `data` payload:
