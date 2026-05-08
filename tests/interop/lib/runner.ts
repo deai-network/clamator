@@ -106,6 +106,8 @@ function extendedEnv(): NodeJS.ProcessEnv {
 // the tsx process itself, not absorbed by the pnpm wrapper.
 const TSX_BIN = path.join(ROOT, 'ts/node_modules/.bin/tsx');
 
+// detached:true makes the child its own process group leader, so killing via
+// negative PID terminates the whole group (uv→python, tsx-wrapper→node, etc.).
 function spawnServer(
   lang: 'ts' | 'py',
   cfg: Record<string, unknown>,
@@ -116,14 +118,14 @@ function spawnServer(
     proc = spawn(
       TSX_BIN,
       [path.join(ROOT, 'tests/interop/drivers/ts/server.ts')],
-      { cwd: path.join(ROOT, 'ts'), env, stdio: ['pipe', 'pipe', 'pipe'] },
+      { cwd: path.join(ROOT, 'ts'), env, stdio: ['pipe', 'pipe', 'pipe'], detached: true },
     );
   } else {
     proc = spawn(
       'uv',
       ['--project', path.join(ROOT, 'py'), 'run', 'python',
        path.join(ROOT, 'tests/interop/drivers/py/server.py')],
-      { cwd: ROOT, env, stdio: ['pipe', 'pipe', 'pipe'] },
+      { cwd: ROOT, env, stdio: ['pipe', 'pipe', 'pipe'], detached: true },
     );
   }
   proc.stdin.write(JSON.stringify(cfg));
@@ -141,14 +143,14 @@ function spawnClient(
     proc = spawn(
       TSX_BIN,
       [path.join(ROOT, 'tests/interop/drivers/ts/client.ts')],
-      { cwd: path.join(ROOT, 'ts'), env, stdio: ['pipe', 'pipe', 'pipe'] },
+      { cwd: path.join(ROOT, 'ts'), env, stdio: ['pipe', 'pipe', 'pipe'], detached: true },
     );
   } else {
     proc = spawn(
       'uv',
       ['--project', path.join(ROOT, 'py'), 'run', 'python',
        path.join(ROOT, 'tests/interop/drivers/py/client.py')],
-      { cwd: ROOT, env, stdio: ['pipe', 'pipe', 'pipe'] },
+      { cwd: ROOT, env, stdio: ['pipe', 'pipe', 'pipe'], detached: true },
     );
   }
   proc.stdin.write(JSON.stringify(cfg));
@@ -253,11 +255,19 @@ async function readClientOutput(
   });
 }
 
+// Send signal to the whole process group via negative PID. Falls back to
+// per-process kill if PID is unavailable. Detached spawn (above) makes this work.
 function killProc(proc: ChildProcessWithoutNullStreams, signal: NodeJS.Signals = 'SIGTERM'): void {
-  try { proc.kill(signal); } catch { /* already dead */ }
+  if (proc.pid === undefined) return;
+  try { process.kill(-proc.pid, signal); }
+  catch {
+    try { proc.kill(signal); } catch { /* already dead */ }
+  }
 }
 
-async function waitForExit(proc: ChildProcessWithoutNullStreams, timeoutMs = 5000): Promise<void> {
+// 8s timeout: server's shutdown_grace_ms defaults to 5000, so SIGTERM-then-graceful
+// can legitimately take ~5s. Give it a safety margin before SIGKILL.
+async function waitForExit(proc: ChildProcessWithoutNullStreams, timeoutMs = 8000): Promise<void> {
   return new Promise((resolve) => {
     const t = setTimeout(() => { killProc(proc, 'SIGKILL'); resolve(); }, timeoutMs);
     proc.once('exit', () => { clearTimeout(t); resolve(); });
