@@ -112,10 +112,10 @@ function renderPyTail(c: IrContract): string {
     const snake = camelToSnake(m.name);
     if (m.isNotification) {
       return `    async def ${snake}(self, params: ${N}Params) -> None:
-        await self._client.notify("${c.service}", "${m.name}", params.model_dump(by_alias=True))`;
+        await self._client.notify("${c.service}", "${m.name}", params.model_dump(mode='json', by_alias=True))`;
     }
     return `    async def ${snake}(self, params: ${N}Params, *, timeout_ms: int | None = None) -> ${N}Result:
-        raw = await self._client.call("${c.service}", "${m.name}", params.model_dump(by_alias=True), timeout_ms=timeout_ms)
+        raw = await self._client.call("${c.service}", "${m.name}", params.model_dump(mode='json', by_alias=True), timeout_ms=timeout_ms)
         return ${N}Result.model_validate(raw)`;
   }).join('\n\n');
 

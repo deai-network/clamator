@@ -39,11 +39,11 @@ class ArithClient:
         self._client = client
 
     async def add(self, params: AddParams, *, timeout_ms: int | None = None) -> AddResult:
-        raw = await self._client.call("arith", "add", params.model_dump(by_alias=True), timeout_ms=timeout_ms)
+        raw = await self._client.call("arith", "add", params.model_dump(mode='json', by_alias=True), timeout_ms=timeout_ms)
         return AddResult.model_validate(raw)
 
     async def divide(self, params: DivideParams, *, timeout_ms: int | None = None) -> DivideResult:
-        raw = await self._client.call("arith", "divide", params.model_dump(by_alias=True), timeout_ms=timeout_ms)
+        raw = await self._client.call("arith", "divide", params.model_dump(mode='json', by_alias=True), timeout_ms=timeout_ms)
         return DivideResult.model_validate(raw)
 
 

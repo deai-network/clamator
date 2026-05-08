@@ -94,7 +94,7 @@ class RpcServerCore:
                 return build_error_response(
                     rpc_id, -32603, "Result validation failed", {"errors": e.errors()}
                 )
-            return build_success_response(rpc_id, validated.model_dump(by_alias=True))
+            return build_success_response(rpc_id, validated.model_dump(mode='json', by_alias=True))
         return dispatch
 
     async def start(self) -> None:

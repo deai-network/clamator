@@ -19,7 +19,7 @@ class NotificationsClient:
         self._client = client
 
     async def ping(self, params: PingParams) -> None:
-        await self._client.notify("notifications", "ping", params.model_dump(by_alias=True))
+        await self._client.notify("notifications", "ping", params.model_dump(mode='json', by_alias=True))
 
 
 class NotificationsService(ABC):
