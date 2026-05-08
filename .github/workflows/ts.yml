@@ -29,9 +29,9 @@ jobs:
         run: cd ts && pnpm install --frozen-lockfile
       - name: Check READMEs verbatim
         run: node scripts/check-readme-verbatim.mjs
-      - name: Lint
-        run: cd ts && pnpm -r lint
       - name: Build
         run: cd ts && pnpm -r build
+      - name: Lint
+        run: cd ts && pnpm -r lint
       - name: Test
         run: cd ts && pnpm -r test
