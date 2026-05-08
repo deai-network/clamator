@@ -59,7 +59,7 @@ async def call_arith(bus: MemoryBus) -> AddResult:
 
 (Verbatim from `py/packages/over-memory/tests/client.py:1-12`.)
 
-`server.start()` returns once handlers are registered on the bus; it does not block. Your application controls the server's lifetime. Call `await server.stop()` to shut down — since the loopback is in-process, the drain is instantaneous and the server unregisters from the bus without closing any external resource.
+`server.start()` returns once handlers are registered on the bus; it does not block. Your application controls the server's lifetime. Call `await server.stop()` to shut down — since the loopback is in-process, the drain is instantaneous and the server unregisters from the bus without closing any external resource. `start()` and `stop()` are both idempotent (calling either twice is a no-op); once `stop()` has been called, calling `start()` again raises — create a new instance to restart.
 
 A single server can host multiple services. Call `register_service(contract, handler_obj)` once per contract before `start()`; each is registered as its own dispatcher on the shared bus. Registrations after `start()` are silently ignored.
 

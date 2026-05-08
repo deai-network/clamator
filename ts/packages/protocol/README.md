@@ -88,7 +88,7 @@ describe('RpcError', () => {
 
 (Verbatim from `ts/packages/protocol/tests/rpc-error.test.ts:1-11`.)
 
-Reserved JSON-RPC error codes (`-32600` to `-32603` for protocol-level errors, `-32000` to `-32099` reserved for transport implementations) are owned by the protocol layer; pick application-specific codes outside that range.
+Reserved JSON-RPC error codes (`-32600` to `-32603` for protocol-level errors, `-32000` to `-32099` reserved for transport implementations) are owned by the protocol layer; pick application-specific codes outside that range. A workable convention is to pick a contiguous private band per error category (e.g., `-32100..-32199` for state-machine refusals, `-32200..-32299` for resource-not-found shapes) and document the band in your contract's documentation. Codegen does not reserve any band — application codes are entirely your namespace.
 
 What the client sees:
 

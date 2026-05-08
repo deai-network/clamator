@@ -64,11 +64,13 @@ async def call_arith(*, redis: Redis, key_prefix: str) -> AddResult:
 
 (Verbatim from `py/packages/over-redis/tests/client.py:1-13`.)
 
-`server.start()` returns once each registered service has its consumer group created and its read loop spawned; it does not block. Your application controls the server's lifetime. Call `await server.stop()` to shut down — drains in-flight handlers up to `grace_ms` (default 5 s) before disconnecting.
+`server.start()` returns once each registered service has its consumer group created and its read loop spawned; it does not block. Your application controls the server's lifetime. Call `await server.stop()` to shut down — drains in-flight handlers up to `grace_ms` (default 5 s) before disconnecting. `start()` and `stop()` are both idempotent (calling either twice is a no-op); once `stop()` has been called, calling `start()` again raises — create a new instance to restart. Client-side cancellation (e.g., `asyncio.CancelledError` raised in the awaiter) is not propagated to the server; the server completes the handler and writes a reply that the canceled caller never reads.
 
 A single server can host multiple services. Call `register_service(contract, handler_obj)` once per contract before `start()`; each service gets its own consumer group keyed by the service name. Registrations after `start()` are silently ignored — no consumer group or read loop is created for them.
 
 By default the connection is built from `$REDIS_URL` (or `redis://localhost:6379`). Pass `redis_url=` for a different URL, or `redis=` for a pre-built `redis.asyncio.Redis` instance.
+
+`key_prefix` is used as a literal Redis key prefix — clamator does not parse it. Any string Redis accepts as a key works, including slashes, colons, and embedded path-like separators (e.g., `my-app/tenant-42`).
 
 Sharing one injected `redis` instance across multiple `RedisRpcServer` and `RedisRpcClient` instances — and across your application's other Redis usage on the same instance — is safe. Each server/client manages its own subscription internally; XREADGROUP and reply-stream XREAD calls use short polling blocks, so non-blocking ops (XADD, XACK, XAUTOCLAIM) on the same connection interleave without deadlock.
 
@@ -115,6 +117,8 @@ Call `await client.stop()` on each client during application shutdown to drain t
 Multiple `RedisRpcServer` instances sharing the same `key_prefix` form a competing-consumers pool: each call is processed by exactly one instance. They share a single Redis consumer group per service (named `<service>`); each server is a unique consumer (named `<service>:<instance_id>`). XREADGROUP delivers each request to exactly one server. A reclaim loop (`XAUTOCLAIM`) re-delivers messages unacknowledged for `consumer_claim_idle_ms` (default 60,000 ms). Delivery semantics are at-least-once. To run a single-consumer scenario, run one server.
 
 **Handlers must be idempotent.** A handler whose execution exceeds `consumer_claim_idle_ms` is reclaimed and re-dispatched to another consumer (or itself), so the same request may run more than once. A client timeout does not propagate to the server (see the client comment above), so a request the client gave up on may still complete server-side.
+
+**On start.** The server's consumer loop reads new entries via XREADGROUP with id `>`. Pending entries from a prior session — entries XREADGROUPed but not XACKed before a crash — are reclaimed via XAUTOCLAIM after `consumer_claim_idle_ms` (default 60s) elapses; new entries arriving in the meantime are processed normally.
 
 **Per-service dispatch is serialized within a single server.** Each registered service has its own consumer loop that reads up to 16 messages per XREADGROUP poll and processes them one at a time (`await` per message; no `asyncio.create_task`). Multiple services registered on the same server run their own consumer loops concurrently, but two requests for the same service on the same server are not parallelized. To process one service's requests in parallel, run multiple `RedisRpcServer` instances sharing the same `key_prefix` — the consumer group splits work between them.
 

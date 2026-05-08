@@ -74,11 +74,13 @@ export async function callArith(opts: { redis: IORedis; keyPrefix: string }) {
 
 (Verbatim from `ts/packages/over-redis/tests/client.ts:1-12`. In your own code, replace `../src/index.js` with `@clamator/over-redis`.)
 
-`server.start()` returns once each registered service has its consumer group created and its read loop spawned; it does not block. Your application controls the server's lifetime. Call `await server.stop()` to shut down — drains in-flight handlers up to `graceMs` (default 5 s) before disconnecting.
+`server.start()` returns once each registered service has its consumer group created and its read loop spawned; it does not block. Your application controls the server's lifetime. Call `await server.stop()` to shut down — drains in-flight handlers up to `graceMs` (default 5 s) before disconnecting. `start()` and `stop()` are both idempotent (calling either twice is a no-op); once `stop()` has been called, calling `start()` again raises — create a new instance to restart. Client-side cancellation (e.g., an aborted Promise) is not propagated to the server; the server completes the handler and writes a reply that the canceled caller never reads.
 
 A single server can host multiple services. Call `registerService(contract, handlers)` once per contract before `start()`; each service gets its own consumer group keyed by the service name. Registrations after `start()` are silently ignored — no consumer group or read loop is created for them.
 
 By default the connection is built from `$REDIS_URL` (or `redis://localhost:6379`). Pass `redisUrl` for a different URL, or `redis` for a pre-built `ioredis` instance.
+
+`keyPrefix` is used as a literal Redis key prefix — clamator does not parse it. Any string Redis accepts as a key works, including slashes, colons, and embedded path-like separators (e.g., `my-app/tenant-42`).
 
 Sharing one injected `redis` instance across multiple `RedisRpcServer` and `RedisRpcClient` instances — and across your application's other Redis usage on the same instance — is safe. Each server/client manages its own subscription internally: for blocking stream reads (XREADGROUP, XREAD on the reply stream), the transport calls `redis.duplicate()` to obtain a dedicated connection so the injected one stays available for non-blocking ops (XADD, XACK, XAUTOCLAIM).
 
@@ -124,6 +126,8 @@ Call `await client.stop()` on each client during application shutdown to drain t
 Multiple `RedisRpcServer` instances sharing the same `keyPrefix` form a competing-consumers pool: each call is processed by exactly one instance. They share a single Redis consumer group per service (named `<service>`); each server is a unique consumer (named `<service>:<instanceId>`). XREADGROUP delivers each request to exactly one server. A reclaim loop (`XAUTOCLAIM`) re-delivers messages unacknowledged for `consumerClaimIdleMs` (default 60,000 ms). Delivery semantics are at-least-once. To run a single-consumer scenario, run one server.
 
 **Handlers must be idempotent.** A handler whose execution exceeds `consumerClaimIdleMs` is reclaimed and re-dispatched to another consumer (or itself), so the same request may run more than once. A client timeout does not propagate to the server (see the client comment above), so a request the client gave up on may still complete server-side.
+
+**On start.** The server's consumer loop reads new entries via XREADGROUP with id `>`. Pending entries from a prior session — entries XREADGROUPed but not XACKed before a crash — are reclaimed via XAUTOCLAIM after `consumerClaimIdleMs` (default 60s) elapses; new entries arriving in the meantime are processed normally.
 
 **Per-service dispatch is serialized within a single server.** Each registered service has its own consumer loop that reads up to 16 messages per XREADGROUP poll and processes them one at a time (`await` per message; no `asyncio.create_task`). Multiple services registered on the same server run their own consumer loops concurrently, but two requests for the same service on the same server are not parallelized. To process one service's requests in parallel, run multiple `RedisRpcServer` instances sharing the same `keyPrefix` — the consumer group splits work between them.
 
