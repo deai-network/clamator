@@ -83,6 +83,10 @@ N/A — `MemoryBus` owns no external state. There are no Redis keys, no streams,
 
 N/A — there is no external connection to own. `MemoryRpcServer` and `MemoryRpcClient` share a `MemoryBus` that lives entirely in-process; `stop()` releases its references without closing any external resource.
 
+## Testing handlers without Redis
+
+`clamator-over-memory` is the recommended substrate for unit-testing handlers, including the refusal paths of state-machine-shaped APIs. Construct a `MemoryBus`, register your handler against the same `arith_contract` (or your real contract) on a `MemoryRpcServer`, instantiate `MemoryRpcClient` + the codegen-emitted `<Service>Client` proxy, and exercise the handler through the typed proxy. Validation, error-code mapping, and result-model serialization match `clamator-over-redis` exactly (see "Protocol-level parity" below) — tests that pass here exercise the same dispatcher code paths that run in production.
+
 ## Protocol-level parity with over-redis
 
 Params/result validation, error code mapping, handler exception wrapping, and `register_service` semantics are identical to `clamator-over-redis` — both transports share the same dispatcher (`RpcServerCore` from `clamator-protocol`). Only the wire substrate differs. Tests written against this transport for protocol-level behaviors translate directly to over-redis.

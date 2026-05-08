@@ -47,6 +47,7 @@ const arith = defineContract('arith', {
 - `RpcError` — the error type you throw from a handler to surface a structured JSON-RPC error to the caller.
 - `ClamatorProtocolError`, `ClamatorTransportError` — distinguishable error classes for protocol-level vs. transport-level failures.
 - `Transport`, `Dispatcher` — interfaces a custom transport adapter implements.
+- `RpcServerCore`, `RpcClientCore` — base classes the transport packages' `*RpcServer` / `*RpcClient` extend. Useful for building custom transport adapters or for type annotations across transport boundaries.
 
 ## Version compatibility
 
@@ -74,6 +75,7 @@ Codegen-emitted clients and hand-built service registrations interoperate freely
 - **Setting handler properties at runtime works.** The dispatcher looks up the handler via `entry.handlers[methodName]`, so an object built up with `obj[name] = async (...) => {...}` at runtime is a valid handlers literal. You don't need a class or static interface implementation.
 - **Duplicate `registerService` throws.** Calling `registerService(c1, h1)` followed by `registerService(c2, h2)` with the same `contract.service` value throws an `Error`. There is no replace-or-merge semantic — pick one path or build the union contract before registering.
 - **`registerService` after `start()` is silently ineffective.** The protocol-level state is updated, but the transport's consumer-loop machinery is initialized once at `start()` and never revisited. New entries don't get a consumer group / read loop spawned, so requests for them are never dispatched. Register all services before calling `start()`.
+- **Handler-method lookup is lazy.** `registerService(contract, handlers)` does not validate that `handlers` defines every method named in the contract. The dispatcher does `entry.handlers[methodName]` per request — a missing entry surfaces as `RpcError({ code: -32601, message: "Method not found" })` at call time, not at registration. Type the `handlers` literal as the codegen-emitted `<Service>Service` interface (e.g., `const handlers: ArithService = {...}`) to push the check to TypeScript compile time.
 
 **Be aware that runtime contract construction defeats the point of having a contract.** clamator's value comes from mechanically-guaranteed compatibility between RPC client and server: the same Zod source produces both sides, codegen ensures they stay in lockstep, and the manifest-diff workflow catches drift. A contract built at runtime — where one side's available methods aren't known until the program runs — gives up all of that. If you find yourself reaching for runtime contract construction, consider whether clamator is the right primitive for what you're doing; a thinner JSON-RPC stack, or a queue with hand-rolled envelopes, may serve you better.
 
@@ -86,7 +88,7 @@ Server-side handlers receive **parsed values from the contract's Zod schemas**, 
 3. **Handler exceptions.** A handler that throws `new RpcError({ code, message, data })` produces a response with that exact code/message/data. Any other thrown error is wrapped as `RpcError({ code: -32603, message: "Internal error", data: { ... } })`.
 4. **Result validation.** If the method has a `result` schema, the return value is run through `methodDef.result.parse(result)`. A handler returning the wrong shape is reported to the client as `RpcError({ code: -32603, message: "Result validation failed", data: { ... } })` — there is no automatic coercion. Notifications skip result validation.
 
-Handlers are insulated from wire-format details: if the dispatch reaches your code, the params are valid; if your return value fails validation, the client sees a structured error rather than a corrupted reply.
+Handlers are insulated from wire-format details: if the dispatch reaches your code, the params are valid; if your return value fails validation, the client sees a structured error rather than a corrupted reply. The result envelope's payload is serialized through Zod's parse-then-stringify pipeline, so any `.transform(...)` / `.brand(...)` aliasing on the result schema is applied consistently on the way out.
 
 **Notification handler exceptions are silently swallowed.** The dispatcher catches `RpcError` and any other thrown error in the same `try/catch` block, but returns `null` on the notification path (no response envelope to write). There is no built-in logging hook — if your notification handlers can fail in interesting ways, wrap the handler body with your own `try/catch` + observability so the failure isn't invisible.
 

@@ -41,6 +41,7 @@ The single `methods` dict holds both methods and notifications. A `MethodEntry` 
 - `RpcError` — the error type you raise from a handler to surface a structured JSON-RPC error to the caller.
 - `ClamatorProtocolError`, `ClamatorTransportError` — distinguishable error classes for protocol-level vs. transport-level failures.
 - `Transport`, `Dispatcher` — interfaces a custom transport adapter implements.
+- `RpcServerCore`, `RpcClientCore` — base classes the transport packages' `*RpcServer` / `*RpcClient` extend. Useful for building custom transport adapters or for type annotations across transport boundaries.
 
 ## Hand-built contracts
 
@@ -53,6 +54,7 @@ The `Contract` and `MethodEntry` classes are first-class — you do not need to 
 - **`setattr` works.** The dispatcher resolves handlers via `getattr(handler_instance, handler_attr)`, so a plain object with attributes set at runtime via `setattr(obj, name, async_fn)` is a valid handler. You don't need a class.
 - **Duplicate `register_service` raises.** Calling `register_service(c1, h1)` followed by `register_service(c2, h2)` with the same `contract.service` value raises `ValueError`. There is no replace-or-merge semantic — pick one path or build the union contract before registering.
 - **`register_service` after `start()` is silently ineffective.** The protocol-level state is updated, but the transport's consumer-loop machinery is initialized once at `start()` and never revisited. New entries don't get a consumer group / read loop spawned, so requests for them are never dispatched. Register all services before calling `start()`.
+- **Handler-attribute resolution is lazy.** `register_service(contract, handler_instance)` does not validate that `handler_instance` exposes every `handler_attr` named in the contract. The dispatcher does `getattr(handler_instance, attr, None)` per request — a missing attribute surfaces as `RpcError(-32601, "Method not found")` at call time, not at registration. Subclassing the codegen-emitted `<Service>Service` ABC pushes that check to class-instantiation time (Python complains about missing abstract methods); plain duck-typed handlers don't get that benefit.
 
 **Be aware that runtime contract construction defeats the point of having a contract.** clamator's value comes from mechanically-guaranteed compatibility between RPC client and server: the same Zod source produces both sides, codegen ensures they stay in lockstep, and the manifest-diff workflow catches drift. A contract built at runtime — where one side's available methods aren't known until the program runs — gives up all of that. If you find yourself reaching for runtime contract construction, consider whether clamator is the right primitive for what you're doing; a thinner JSON-RPC stack, or a queue with hand-rolled envelopes, may serve you better.
 
@@ -92,7 +94,7 @@ Server-side handlers receive **already-validated Pydantic instances**, not raw d
 3. **Handler exceptions.** A handler that raises `RpcError(code, message, data)` produces a response with that exact code/message/data. Any other exception is wrapped as `RpcError(-32603, "Internal error", data={...exception details})`.
 4. **Result validation.** If the method has a `result_model`, the return value is run through `result_model.model_validate(...)`. A handler returning the wrong shape is reported to the client as `RpcError(-32603, "Result validation failed", data={"errors": ...})` — there is no automatic coercion. Notifications skip result validation.
 
-Handlers are insulated from wire-format details: if the dispatch reaches your code, the params are valid; if your return value fails validation, the client sees a structured error rather than a corrupted reply.
+Handlers are insulated from wire-format details: if the dispatch reaches your code, the params are valid; if your return value fails validation, the client sees a structured error rather than a corrupted reply. The result is serialized to the wire via `validated.model_dump(mode='json', by_alias=True)` — any field aliases declared on the `result_model` (e.g., `Field(alias="processId")`) are applied on the way out, matching the camelCase the TS side expects.
 
 **Notification handler exceptions are silently swallowed.** The dispatcher catches `RpcError` and any other exception in the same `try/except` block, but returns `None` on the notification path (no response envelope to write). There is no built-in logging hook — if your notification handlers can fail in interesting ways, wrap the handler body with your own `try/except` + observability so the failure isn't invisible.
 

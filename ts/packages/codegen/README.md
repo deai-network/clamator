@@ -41,6 +41,8 @@ The interop test runner invokes the CLI like this:
 
 Pass `--out-py` only when you want Python output. The Python emitter requires the [`datamodel-code-generator`](https://pypi.org/project/datamodel-code-generator/) Python tool on `PATH`.
 
+**Flag conditionality.** `--ts-contract-import` is required only when `--out-ts` is set (it controls the import path written into emitted TS wrappers); omit it for Python-only runs. `--manifest` is optional — the manifest file is only useful for the drift-detection workflow described below; codegen emits TS / Py wrappers correctly whether or not it's passed.
+
 ## Contract input shape
 
 A contract module exports one or more contracts via `defineContract` from `@clamator/protocol`:

@@ -90,7 +90,7 @@ By default the connection is built from `$REDIS_URL` (or `redis://localhost:6379
 
 Sharing one injected `redis` instance across multiple `RedisRpcServer` and `RedisRpcClient` instances — and across your application's other Redis usage on the same instance — is safe. Each server/client manages its own subscription internally: for blocking stream reads (XREADGROUP, XREAD on the reply stream), the transport calls `redis.duplicate()` to obtain a dedicated connection so the injected one stays available for non-blocking ops (XADD, XACK, XAUTOCLAIM).
 
-Per-client reply streams are bounded: the server XADDs replies with `MAXLEN ~ replyStreamMaxLen` (default 1024) and the client `DEL`s its reply stream on `stop()`. If a client process crashes without calling `stop()`, the reply-stream key persists with up to ~1024 entries until manually deleted; there is no Redis-side TTL.
+Per-client reply streams are bounded: the server XADDs replies with `MAXLEN ~ replyStreamMaxLen` (default 1024) and the client `DEL`s its reply stream on `stop()`. If a client process crashes without calling `stop()`, the reply-stream key persists with up to ~1024 entries until manually deleted; there is no Redis-side TTL. From the server's perspective the abandoned reply stream is harmless — XADD to a stream nobody is reading is still a normal stream write; the bounded MAXLEN keeps memory usage finite.
 
 ## Lifecycle integration
 
@@ -128,8 +128,8 @@ export async function runArithServer(opts: { redis: IORedis; keyPrefix: string }
 
 ## Key surface
 
-- `RedisRpcServer({ keyPrefix, redis?, redisUrl?, ... })` — `registerService(contract, handlers)`, `start()`, `stop()`.
-- `RedisRpcClient({ keyPrefix, redis?, redisUrl?, defaultTimeoutMs? })` — `start()`, `stop()`. The instance is also a `ClamatorClient`, so it can be wrapped by a generated `*Client` proxy.
+- `RedisRpcServer({ keyPrefix, redis?, redisUrl?, instanceId?, consumerClaimIdleMs?, replyStreamMaxLen?, shutdownGraceMs? })` — `registerService(contract, handlers)`, `start()`, `stop({ graceMs? })`. Defaults: `consumerClaimIdleMs: 60_000`, `replyStreamMaxLen: 1024`, `shutdownGraceMs: 5_000`, `stop.graceMs: 5_000`.
+- `RedisRpcClient({ keyPrefix, redis?, redisUrl?, defaultTimeoutMs?, instanceId? })` — `start()`, `stop()`. Default `defaultTimeoutMs: 30_000`. The instance is also a `ClamatorClient`, so it can be wrapped by a generated `*Client` proxy.
 
 ## Client lifetime and fan-out
 
@@ -157,7 +157,7 @@ export async function callMultipleServices(keyPrefix: string) {
 
 (Verbatim from `ts/packages/over-redis/tests/multi-service.example.ts:1-15`. In your own code, replace `../src/index.js` with `@clamator/over-redis`.)
 
-For multiple backends, construct one `RedisRpcClient` per `keyPrefix` and hold them in named variables. The same injected `redis` instance can back every client, so the marginal cost of an additional `keyPrefix` is one background task + one duplicated TCP connection + one reply-stream key in Redis.
+For multiple backends, construct one `RedisRpcClient` per `keyPrefix` and hold them in named variables. The same injected `redis` instance can back every client, so the marginal cost of an additional `keyPrefix` is one background task + one duplicated TCP connection + one reply-stream key in Redis. The "multiple backends, one keyPrefix per backend" topology degenerates the worker-pool semantics to a pool of one per keyPrefix — the `keyPrefix` itself acts as the multi-tenant routing key, and each client's traffic stays within its own backend's command and reply streams.
 
 Call `await client.stop()` on each client during application shutdown to drain the reply loop and `DEL` the reply-stream key.
 

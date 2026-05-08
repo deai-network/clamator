@@ -76,7 +76,7 @@ By default the connection is built from `$REDIS_URL` (or `redis://localhost:6379
 
 Sharing one injected `redis` instance across multiple `RedisRpcServer` and `RedisRpcClient` instances — and across your application's other Redis usage on the same instance — is safe. Each server/client manages its own subscription internally; XREADGROUP and reply-stream XREAD calls use short polling blocks, so non-blocking ops (XADD, XACK, XAUTOCLAIM) on the same connection interleave without deadlock.
 
-Per-client reply streams are bounded: the server XADDs replies with `maxlen=reply_stream_maxlen` (default 1024, approximate) and the client deletes its reply stream on `stop()`. If a client process crashes without calling `stop()`, the reply-stream key persists with up to ~1024 entries until manually deleted; there is no Redis-side TTL.
+Per-client reply streams are bounded: the server XADDs replies with `maxlen=reply_stream_maxlen` (default 1024, approximate) and the client deletes its reply stream on `stop()`. If a client process crashes without calling `stop()`, the reply-stream key persists with up to ~1024 entries until manually deleted; there is no Redis-side TTL. From the server's perspective the abandoned reply stream is harmless — XADD to a stream nobody is reading is still a normal stream write; the bounded MAXLEN keeps memory usage finite.
 
 ## Lifecycle integration
 
@@ -122,8 +122,8 @@ async def run_arith_server(*, redis: Redis, key_prefix: str) -> None:
 
 ## Key surface
 
-- `RedisRpcServer(*, key_prefix, redis=None, redis_url=None, ...)` — `register_service(contract, handler_obj)`, `start()`, `stop()`.
-- `RedisRpcClient(*, key_prefix, redis=None, redis_url=None, default_timeout_ms=30_000)` — `start()`, `stop()`. The instance is a `ClamatorClient`, so it can be wrapped by a generated `*Client` proxy.
+- `RedisRpcServer(*, key_prefix, redis=None, redis_url=None, instance_id=None, consumer_claim_idle_ms=60_000, reply_stream_maxlen=1024, shutdown_grace_ms=5_000)` — `register_service(contract, handler_obj)`, `start()`, `stop(*, grace_ms=5_000)`.
+- `RedisRpcClient(*, key_prefix, redis=None, redis_url=None, default_timeout_ms=30_000, instance_id=None)` — `start()`, `stop()`. The instance is a `ClamatorClient`, so it can be wrapped by a generated `*Client` proxy.
 
 ## Client lifetime and fan-out
 
@@ -152,7 +152,7 @@ async def call_multiple_services(key_prefix: str) -> AddResult:
 
 (Verbatim from `py/packages/over-redis/tests/multi_service_example.py:1-16`.)
 
-For multiple backends, construct one `RedisRpcClient` per `key_prefix` and hold them in named variables. The same injected `redis` instance can back every client, so the marginal cost of an additional `key_prefix` is one background task + one reply-stream key in Redis.
+For multiple backends, construct one `RedisRpcClient` per `key_prefix` and hold them in named variables. The same injected `redis` instance can back every client, so the marginal cost of an additional `key_prefix` is one background task + one reply-stream key in Redis. The "multiple backends, one key_prefix per backend" topology degenerates the worker-pool semantics to a pool of one per key_prefix — the `key_prefix` itself acts as the multi-tenant routing key, and each client's traffic stays within its own backend's command and reply streams.
 
 Call `await client.stop()` on each client during application shutdown to drain the reply loop and delete the reply-stream key.
 
