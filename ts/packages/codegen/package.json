@@ -1,6 +1,6 @@
 {
   "name": "@clamator/codegen",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Codegen CLI: Zod contracts → TS + Py wrappers (pre-1.0).",
   "license": "Apache-2.0",
   "type": "module",

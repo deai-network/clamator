@@ -1,6 +1,6 @@
 {
   "name": "@clamator/protocol",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Polyglot RPC protocol layer (pre-1.0; API may break in minor versions).",
   "license": "Apache-2.0",
   "type": "module",
