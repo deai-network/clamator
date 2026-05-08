@@ -120,7 +120,7 @@ class ServerRedisTransport:
                     stream, group, consumer, min_idle_time=self._claim_idle_ms, count=32,
                 )
                 # claimed: (next_cursor, [(id, fields), ...], deleted_ids)
-                _, entries, _ = claimed if len(claimed) == 3 else (claimed[0], claimed[1], [])
+                _, entries, _ = claimed if len(claimed) == 3 else (claimed[0], claimed[1], [])  # noqa: PLR2004  # xautoclaim returns a 3-tuple in newer Redis; arity check
                 for entry_id, fields in entries or []:
                     await self._handle_entry(service, stream, group, entry_id, fields)
             except asyncio.CancelledError:

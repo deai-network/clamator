@@ -22,8 +22,10 @@ async def test_send_after_stop_rejects():
 
 async def test_duplicate_service_registration():
     bus = MemoryBus()
-    t1 = MemoryTransport(bus); t2 = MemoryTransport(bus)
-    await t1.start(); await t2.start()
+    t1 = MemoryTransport(bus)
+    t2 = MemoryTransport(bus)
+    await t1.start()
+    await t2.start()
 
     async def d(env): return None
     await t1.register_service("arith", d)

@@ -133,7 +133,9 @@ async def test_notification_returns_none():
     s = RpcServerCore(t)
     s.register_service(arith_contract, ArithService())
     await s.start()
-    nenv = NotificationEnvelope(service="arith", method="ping", full_method="arith.ping", params={}, raw={})
+    nenv = NotificationEnvelope(
+        service="arith", method="ping", full_method="arith.ping", params={}, raw={}
+    )
     reply = await t.dispatchers["arith"](nenv)
     assert reply is None
 

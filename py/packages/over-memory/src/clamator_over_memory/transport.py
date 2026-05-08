@@ -47,7 +47,9 @@ class MemoryTransport:
                     return
                 self._pending.pop(str(parsed.id))
                 if reply is None:
-                    fut.set_exception(ClamatorTransportError("dispatcher returned None for a request"))
+                    fut.set_exception(
+                        ClamatorTransportError("dispatcher returned None for a request")
+                    )
                 else:
                     fut.set_result(reply)
             except Exception as e:  # noqa: BLE001

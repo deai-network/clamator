@@ -12,7 +12,9 @@ from clamator_protocol.envelope import (
 
 
 def test_classifies_request():
-    env = parse_envelope({"jsonrpc": "2.0", "method": "engine.launch", "params": {"x": 1}, "id": "abc"})
+    env = parse_envelope(
+        {"jsonrpc": "2.0", "method": "engine.launch", "params": {"x": 1}, "id": "abc"}
+    )
     assert env.kind is EnvelopeKind.REQUEST
     assert env.service == "engine"
     assert env.method == "launch"
@@ -30,7 +32,9 @@ def test_classifies_success_response():
 
 
 def test_classifies_error_response():
-    env = parse_envelope({"jsonrpc": "2.0", "id": "x", "error": {"code": -32603, "message": "x", "data": None}})
+    env = parse_envelope(
+        {"jsonrpc": "2.0", "id": "x", "error": {"code": -32603, "message": "x", "data": None}}
+    )
     assert env.kind is EnvelopeKind.ERROR_RESPONSE
 
 
@@ -73,8 +77,15 @@ def test_regexes():
 
 
 def test_builders():
-    assert build_request("a.b", {}, "id1") == {"jsonrpc": "2.0", "method": "a.b", "params": {}, "id": "id1"}
+    assert build_request("a.b", {}, "id1") == {
+        "jsonrpc": "2.0", "method": "a.b", "params": {}, "id": "id1"
+    }
     assert build_notification("a.b", {}) == {"jsonrpc": "2.0", "method": "a.b", "params": {}}
-    assert build_success_response("id1", {"x": 1}) == {"jsonrpc": "2.0", "id": "id1", "result": {"x": 1}}
+    assert build_success_response("id1", {"x": 1}) == {
+        "jsonrpc": "2.0", "id": "id1", "result": {"x": 1}
+    }
     err = build_error_response("id1", -32000, "oops", {"k": "v"})
-    assert err == {"jsonrpc": "2.0", "id": "id1", "error": {"code": -32000, "message": "oops", "data": {"k": "v"}}}
+    assert err == {
+        "jsonrpc": "2.0", "id": "id1",
+        "error": {"code": -32000, "message": "oops", "data": {"k": "v"}},
+    }

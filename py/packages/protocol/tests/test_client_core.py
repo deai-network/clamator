@@ -29,7 +29,9 @@ async def test_call_unwraps_result():
 
 
 async def test_call_raises_rpc_error():
-    t = FakeTransport({"jsonrpc": "2.0", "id": "x", "error": {"code": -32001, "message": "x", "data": None}})
+    t = FakeTransport(
+        {"jsonrpc": "2.0", "id": "x", "error": {"code": -32001, "message": "x", "data": None}}
+    )
     c = RpcClientCore(t)
     await c.start()
     with pytest.raises(RpcError) as ei:

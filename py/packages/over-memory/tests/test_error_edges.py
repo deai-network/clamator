@@ -48,7 +48,8 @@ async def test_invalid_params():
     with pytest.raises(RpcError) as ei:
         await client.call("arith", "add", {"a": "x", "b": 1})
     assert ei.value.code == -32602
-    await client.stop(); await server.stop()
+    await client.stop()
+    await server.stop()
 
 
 async def test_client_timeout():
@@ -64,4 +65,5 @@ async def test_client_timeout():
     await client.start()
     with pytest.raises(ClamatorTransportError):
         await client.call("arith", "add", {"a": 1, "b": 1})
-    await client.stop(); await server.stop()
+    await client.stop()
+    await server.stop()

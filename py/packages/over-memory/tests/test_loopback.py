@@ -63,7 +63,8 @@ async def test_handler_rpc_error():
     with pytest.raises(RpcError) as ei:
         await client.call("arith", "add", {"a": 1, "b": 2})
     assert ei.value.code == -32000
-    await client.stop(); await server.stop()
+    await client.stop()
+    await server.stop()
 
 
 async def test_notification_fires():
@@ -77,4 +78,5 @@ async def test_notification_fires():
     await client.notify("arith", "ping", {"tag": "x"})
     await asyncio.sleep(0.01)
     assert svc.pinged is True
-    await client.stop(); await server.stop()
+    await client.stop()
+    await server.stop()

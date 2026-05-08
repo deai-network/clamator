@@ -3,7 +3,7 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Union
+from typing import Any
 
 SERVICE_RE = re.compile(r"^[a-z][a-z0-9-]*$")
 METHOD_RE = re.compile(r"^[a-z][a-zA-Z0-9-]*$")
@@ -16,7 +16,7 @@ class EnvelopeKind(Enum):
     ERROR_RESPONSE = "error"
 
 
-RpcId = Union[str, int]
+RpcId = str | int
 
 
 @dataclass(frozen=True)
@@ -54,16 +54,16 @@ class ErrorResponseEnvelope:
     kind: EnvelopeKind = EnvelopeKind.ERROR_RESPONSE
 
 
-Envelope = Union[
-    RequestEnvelope, NotificationEnvelope, SuccessResponseEnvelope, ErrorResponseEnvelope
-]
+Envelope = (
+    RequestEnvelope | NotificationEnvelope | SuccessResponseEnvelope | ErrorResponseEnvelope
+)
 
 
 def _invalid(msg: str) -> ValueError:
     return ValueError(f"-32600 Invalid Request: {msg}")
 
 
-def parse_envelope(value: Any) -> Envelope:
+def parse_envelope(value: Any) -> Envelope:  # noqa: PLR0912  # envelope-discriminator branching
     if isinstance(value, list):
         raise _invalid("batch requests not supported")
     if not isinstance(value, dict):
@@ -107,7 +107,11 @@ def parse_envelope(value: Any) -> Envelope:
 
     if has_error and not has_result:
         err = value.get("error")
-        if not isinstance(err, dict) or not isinstance(err.get("code"), int) or not isinstance(err.get("message"), str):
+        if (
+            not isinstance(err, dict)
+            or not isinstance(err.get("code"), int)
+            or not isinstance(err.get("message"), str)
+        ):
             raise _invalid("error must have numeric code + string message")
         rpc_id = value["id"] if has_id else None
         return ErrorResponseEnvelope(
@@ -130,5 +134,10 @@ def build_success_response(rpc_id: RpcId, result: Any) -> dict[str, Any]:
     return {"jsonrpc": "2.0", "id": rpc_id, "result": result}
 
 
-def build_error_response(rpc_id: RpcId | None, code: int, message: str, data: Any = None) -> dict[str, Any]:
-    return {"jsonrpc": "2.0", "id": rpc_id, "error": {"code": code, "message": message, "data": data}}
+def build_error_response(
+    rpc_id: RpcId | None, code: int, message: str, data: Any = None
+) -> dict[str, Any]:
+    return {
+        "jsonrpc": "2.0", "id": rpc_id,
+        "error": {"code": code, "message": message, "data": data},
+    }
