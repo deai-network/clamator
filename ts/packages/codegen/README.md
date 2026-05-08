@@ -87,6 +87,23 @@ class ArithService(ABC):
 
 Method-name conversion: a Zod method declared as `addEvent` on the contract becomes `add_event` on the ABC (camelCase in TS, snake_case in Py). Subclass the ABC to register a service: `class MyService(ArithService): async def add(self, params): ...`. The TS side emits a sibling `<Service>Service` interface plus a `<Service>Client` proxy class; consult the matching `arith.ts` under the same `tests/generated/` directory for the TS surface.
 
+## Drift detection via the manifest
+
+`--manifest <path>` writes a JSON file with content-addressed schema hashes per method and notification. The codegen CLI does not have a `--check` mode; drift detection is a pattern you run in CI:
+
+1. Keep `manifest.json` checked into your repo, alongside the committed generated outputs.
+2. In CI, regenerate the codegen output to a temporary path:
+   ```bash
+   npx @clamator/codegen --src contracts --out-ts /tmp/ts --out-py /tmp/py --manifest /tmp/manifest.json
+   ```
+3. Byte-compare against the checked-in copy:
+   ```bash
+   diff manifest.json /tmp/manifest.json
+   ```
+4. Any mismatch means the contract source diverged from the committed generated artifacts. Fail the CI step.
+
+The interop suite uses this exact pattern (regenerate twice into separate tmp directories and compare manifests byte-for-byte) to verify codegen determinism — see `tests/interop/lib/runner.ts:415-425`.
+
 ## Links
 
 - Protocol packages: [`@clamator/protocol`](https://www.npmjs.com/package/@clamator/protocol), [`clamator-protocol`](https://pypi.org/project/clamator-protocol/)

@@ -73,6 +73,13 @@ describe('RpcError', () => {
 
 Reserved JSON-RPC error codes (`-32600` to `-32603` for protocol-level errors, `-32000` to `-32099` reserved for transport implementations) are owned by the protocol layer; pick application-specific codes outside that range.
 
+What the client sees:
+
+- A handler that throws `new RpcError({ code, message, data })` produces an error response carrying that exact code/message/data on the client side; the proxy method re-throws an `RpcError` with the same fields.
+- A handler that throws any other error is caught by the protocol layer and wrapped: clients receive `RpcError({ code: -32603, message: "Internal error", data: {...} })` with exception details in `data`.
+- A client-side call that exceeds `defaultTimeoutMs` rejects with `ClamatorTransportError('call timeout')` from the transport layer. The same class surfaces when no server is consuming the request stream — there is no distinct "no consumer" error.
+- Envelope-level parse and validation failures use the JSON-RPC reserved codes: `-32700` (parse error), `-32600` (invalid request), `-32601` (method not found), `-32602` (invalid params), `-32603` (internal error).
+
 ## Links
 
 - Sibling (Python): [`clamator-protocol`](https://pypi.org/project/clamator-protocol/)

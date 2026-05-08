@@ -95,6 +95,8 @@ Multiple `RedisRpcServer` instances sharing the same `keyPrefix` form a competin
 
 **Handlers must be idempotent.** A handler whose execution exceeds `consumerClaimIdleMs` is reclaimed and re-dispatched to another consumer (or itself), so the same request may run more than once. A client timeout does not propagate to the server (see the client comment above), so a request the client gave up on may still complete server-side.
 
+**Per-service dispatch is serialized within a single server.** Each registered service has its own consumer loop that reads up to 16 messages per XREADGROUP poll and processes them one at a time (`await` per message; no `asyncio.create_task`). Multiple services registered on the same server run their own consumer loops concurrently, but two requests for the same service on the same server are not parallelized. To process one service's requests in parallel, run multiple `RedisRpcServer` instances sharing the same `keyPrefix` — the consumer group splits work between them.
+
 ## Keys owned under `keyPrefix`
 
 | Pattern | Type | Purpose |

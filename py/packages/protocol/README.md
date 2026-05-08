@@ -33,6 +33,8 @@ arith = Contract(
 
 When `clamator-protocol` is consumed alongside generated wrappers from `@clamator/codegen`, the `Contract` and `MethodEntry` values are produced by codegen — the snippet above is what direct authors of test contracts or custom tooling write.
 
+The single `methods` dict holds both methods and notifications. A `MethodEntry` with `result_model=None` declares a notification (the snippet's `ping` is one); there is no separate `notifications=` kwarg. `handler_attr` is the attribute the dispatcher resolves on the registered handler instance — it is independent of the wire-side method name (the dict key) and is conventionally `snake_case`.
+
 ## Key exports
 
 - `Contract`, `MethodEntry` — declare a service's methods and notifications with Pydantic models for params and results.
@@ -73,6 +75,13 @@ def test_rpc_error_construction():
 (Verbatim from `py/packages/protocol/tests/test_rpc_error.py:1-10`.)
 
 Reserved JSON-RPC error codes (`-32600` to `-32603` for protocol-level errors, `-32000` to `-32099` reserved for transport implementations) are owned by the protocol layer; pick application-specific codes outside that range.
+
+What the client sees:
+
+- A handler that raises `RpcError(code, message, data)` produces an error response carrying that exact code/message/data on the client side; the proxy method re-raises an `RpcError` with the same fields.
+- A handler that raises any other exception is caught by the protocol layer and wrapped: clients receive `RpcError(code=-32603, message="Internal error", data={...})` with exception details in `data`.
+- A client-side call that exceeds `default_timeout_ms` raises `clamator_protocol.ClamatorTransportError("call timeout")` from the transport layer, NOT `asyncio.TimeoutError`. The same exception class surfaces when no server is consuming the request stream — there is no distinct "no consumer" error.
+- Envelope-level parse and validation failures use the JSON-RPC reserved codes: `-32700` (parse error), `-32600` (invalid request), `-32601` (method not found), `-32602` (invalid params), `-32603` (internal error).
 
 ## Links
 
