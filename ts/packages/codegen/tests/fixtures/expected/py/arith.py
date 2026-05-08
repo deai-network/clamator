@@ -33,6 +33,7 @@ class DivideResult(BaseModel):
     q: float
     r: int
 
+
 class ArithClient:
     def __init__(self, client: ClamatorClient) -> None:
         self._client = client

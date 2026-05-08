@@ -65,7 +65,10 @@ from clamator_protocol import ClamatorClient, Contract, MethodEntry
 
 `;
     const file = path.join(opts.outDir, `${c.service}.py`);
-    await fs.writeFile(file, header + modelsBody + '\n\n' + tail, 'utf-8');
+    // Three newlines between the (trimmed) Pydantic models block and the tail
+    // (which starts with `class <Service>Client:`) produce two blank lines —
+    // PEP-8's required spacing before top-level class definitions.
+    await fs.writeFile(file, header + modelsBody + '\n\n\n' + tail, 'utf-8');
     filesWritten.push(file);
   }
   return { filesWritten };

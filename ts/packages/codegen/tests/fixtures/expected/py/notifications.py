@@ -13,6 +13,7 @@ class PingParams(BaseModel):
     )
     tag: str | None = None
 
+
 class NotificationsClient:
     def __init__(self, client: ClamatorClient) -> None:
         self._client = client
