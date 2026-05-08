@@ -13,7 +13,6 @@ npm install @clamator/over-memory @clamator/protocol
 Define the contract:
 
 ```typescript
-// contracts/arith.ts
 import { z } from 'zod';
 import { defineContract, defineMethod } from '@clamator/protocol';
 
@@ -25,6 +24,8 @@ export const arithContract = defineContract('arith', {
 });
 ```
 
+(Verbatim from `ts/packages/over-memory/tests/contracts/arith.ts:1-9`.)
+
 Generate the typed proxies:
 
 ```bash
@@ -34,29 +35,32 @@ npx @clamator/codegen --src contracts --out-ts generated --ts-contract-import '.
 Wire server and client through a shared bus, talk via `ArithClient`:
 
 ```typescript
-// loopback.ts
-import { MemoryBus, MemoryRpcServer, MemoryRpcClient } from '@clamator/over-memory';
+import { describe, it, expect } from 'vitest';
+import { MemoryBus, MemoryRpcServer, MemoryRpcClient } from '../src/index.js';
 import { arithContract } from './contracts/arith.js';
 import { ArithClient, type ArithService } from './generated/arith.js';
 
-const handlers: ArithService = {
-  add: async ({ a, b }) => ({ sum: a + b }),
-};
-
-const bus = new MemoryBus();
-const server = new MemoryRpcServer({ bus });
-server.registerService(arithContract, handlers);
-await server.start();
-
-const transport = new MemoryRpcClient({ bus });
-await transport.start();
-
-const arith = new ArithClient(transport);
-console.log(await arith.add({ a: 2, b: 3 })); // { sum: 5 }
-
-await transport.stop();
-await server.stop();
+describe('memory loopback via codegen typed proxy', () => {
+  it('round-trips a successful call through ArithClient', async () => {
+    const bus = new MemoryBus();
+    const server = new MemoryRpcServer({ bus });
+    const handlers: ArithService = {
+      add: async ({ a, b }) => ({ sum: a + b }),
+    };
+    server.registerService(arithContract, handlers);
+    await server.start();
+    const client = new MemoryRpcClient({ bus });
+    await client.start();
+    const arith = new ArithClient(client);
+    const r = await arith.add({ a: 2, b: 3 });
+    expect(r).toEqual({ sum: 5 });
+    await client.stop();
+    await server.stop();
+  });
+});
 ```
+
+(Verbatim from `ts/packages/over-memory/tests/proxy-loopback.test.ts:1-23`.)
 
 `MemoryBus()` takes no arguments and is the only wiring needed. The loopback is synchronous within a single event loop turn — no timeouts, retries, or stream parameters.
 

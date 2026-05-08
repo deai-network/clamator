@@ -19,14 +19,9 @@ npx @clamator/codegen --src contracts --out-py generated
 The emitted `generated/arith.py` exports Pydantic models, a typed `ArithClient`, an `ArithService` ABC, and the `arith_contract` `Contract` object. Wire server and client through a shared bus, talk via `ArithClient`:
 
 ```python
-# loopback.py
-import asyncio
-
+import pytest
 from clamator_over_memory import MemoryBus, MemoryRpcServer, MemoryRpcClient
-
-from generated.arith import (
-    AddParams, AddResult, ArithClient, ArithService, arith_contract,
-)
+from .generated.arith import ArithClient, ArithService, arith_contract, AddParams, AddResult
 
 
 class Arith(ArithService):
@@ -34,25 +29,21 @@ class Arith(ArithService):
         return AddResult(sum=params.a + params.b)
 
 
-async def main() -> None:
+async def test_round_trip_via_codegen_typed_proxy():
     bus = MemoryBus()
     server = MemoryRpcServer(bus=bus)
     server.register_service(arith_contract, Arith())
     await server.start()
-
-    transport = MemoryRpcClient(bus=bus)
-    await transport.start()
-
-    arith = ArithClient(transport)
-    print(await arith.add(AddParams(a=2, b=3)))  # AddResult(sum=5)
-
-    await transport.stop()
+    client = MemoryRpcClient(bus=bus)
+    await client.start()
+    arith = ArithClient(client)
+    r = await arith.add(AddParams(a=2, b=3))
+    assert r.sum == 5
+    await client.stop()
     await server.stop()
-
-
-if __name__ == "__main__":
-    asyncio.run(main())
 ```
+
+(Verbatim from `py/packages/over-memory/tests/test_proxy_loopback.py:1-22`.)
 
 `MemoryBus()` takes no arguments and is the only wiring needed. The loopback is synchronous within a single asyncio task — no timeouts, retries, or stream parameters.
 
