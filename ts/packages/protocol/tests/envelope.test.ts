@@ -61,7 +61,9 @@ describe('parseEnvelope', () => {
   it('METHOD_RE matches expected', () => {
     expect(METHOD_RE.test('launch')).toBe(true);
     expect(METHOD_RE.test('launchProcess')).toBe(true);
-    expect(METHOD_RE.test('launch-process')).toBe(true);
+    // Hyphens are no longer allowed in method names (v0.1.6 breaking change):
+    // they passed wire-side validation but broke codegen Py emission.
+    expect(METHOD_RE.test('launch-process')).toBe(false);
     expect(METHOD_RE.test('Launch')).toBe(false);
   });
 });

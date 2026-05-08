@@ -1,5 +1,9 @@
 export const SERVICE_RE = /^[a-z][a-z0-9-]*$/;
-export const METHOD_RE = /^[a-z][a-zA-Z0-9-]*$/;
+// Method names must be valid identifiers in both TS and Py output of the codegen.
+// Hyphens were previously allowed in the wire-side regex but broke codegen Py
+// emission ("def group-cancel" is invalid syntax). Tightened in v0.1.6 to keep
+// the wire-side and codegen-side validity definitions in agreement.
+export const METHOD_RE = /^[a-z][a-zA-Z0-9]*$/;
 
 // Plain string enum (NOT `const enum` — incompatible with `isolatedModules: true`).
 export enum EnvelopeKind {
