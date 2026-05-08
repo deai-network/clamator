@@ -1,6 +1,6 @@
 # clamator-protocol
 
-Pure JSON-RPC 2.0 protocol primitives plus Pydantic-derived envelope types for clamator. **No I/O, ever** — anything that touches a network, filesystem, or process belongs in a transport adapter.
+Pure JSON-RPC 2.0 protocol primitives plus Pydantic-derived envelope types for clamator. **No I/O, ever** — anything that touches a network, filesystem, or process belongs in a transport adapter. Requires Pydantic v2 (pinned `>=2.5`); v1 is not supported.
 
 ## Install
 

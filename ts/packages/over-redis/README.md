@@ -80,7 +80,9 @@ A single server can host multiple services. Call `registerService(contract, hand
 
 By default the connection is built from `$REDIS_URL` (or `redis://localhost:6379`). Pass `redisUrl` for a different URL, or `redis` for a pre-built `ioredis` instance.
 
-Sharing one injected `redis` instance across multiple `RedisRpcServer` and `RedisRpcClient` instances is safe. Each server/client manages its own subscription internally — for blocking stream reads (XREADGROUP, XREAD on the reply stream), the transport calls `redis.duplicate()` to obtain a dedicated connection so the injected one stays available for non-blocking ops (XADD, XACK, XAUTOCLAIM).
+Sharing one injected `redis` instance across multiple `RedisRpcServer` and `RedisRpcClient` instances — and across your application's other Redis usage on the same instance — is safe. Each server/client manages its own subscription internally: for blocking stream reads (XREADGROUP, XREAD on the reply stream), the transport calls `redis.duplicate()` to obtain a dedicated connection so the injected one stays available for non-blocking ops (XADD, XACK, XAUTOCLAIM).
+
+Per-client reply streams are bounded: the server XADDs replies with `MAXLEN ~ replyStreamMaxLen` (default 1024) and the client `DEL`s its reply stream on `stop()`. If a client process crashes without calling `stop()`, the reply-stream key persists with up to ~1024 entries until manually deleted; there is no Redis-side TTL.
 
 ## Key surface
 
@@ -90,6 +92,8 @@ Sharing one injected `redis` instance across multiple `RedisRpcServer` and `Redi
 ## Worker-pool semantics
 
 Multiple `RedisRpcServer` instances sharing the same `keyPrefix` form a competing-consumers pool: each call is processed by exactly one instance. They share a single Redis consumer group per service (named `<service>`); each server is a unique consumer (named `<service>:<instanceId>`). XREADGROUP delivers each request to exactly one server. A reclaim loop (`XAUTOCLAIM`) re-delivers messages unacknowledged for `consumerClaimIdleMs` (default 60,000 ms). Delivery semantics are at-least-once. To run a single-consumer scenario, run one server.
+
+**Handlers must be idempotent.** A handler whose execution exceeds `consumerClaimIdleMs` is reclaimed and re-dispatched to another consumer (or itself), so the same request may run more than once. A client timeout does not propagate to the server (see the client comment above), so a request the client gave up on may still complete server-side.
 
 ## Keys owned under `keyPrefix`
 
