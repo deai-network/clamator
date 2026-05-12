@@ -1,8 +1,8 @@
 import { randomUUID } from 'node:crypto';
 import IORedis, { type Redis } from 'ioredis';
 import {
-  parseEnvelope, EnvelopeKind, ClamatorTransportError,
-  type Transport, type SendOptions, type Dispatcher,
+  parseEnvelope, EnvelopeKind, ClamatorTransportError, consoleLogger,
+  type Transport, type SendOptions, type Dispatcher, type Logger,
 } from '@clamator/protocol';
 import { commandStream, replyStream } from './keys.js';
 
@@ -14,6 +14,7 @@ export interface ClientTransportOptions {
   keyPrefix: string;
   instanceId?: string;
   defaultTimeoutMs?: number;
+  logger?: Logger;
 }
 
 interface Pending {
@@ -35,6 +36,7 @@ export class ClientRedisTransport implements Transport {
   // Dedicated connection for the blocking XREAD reply loop, so that
   // xadd calls in send() are not queued behind the blocking read.
   private replyRedis: Redis | null = null;
+  private readonly logger!: Logger;
 
   constructor(opts: ClientTransportOptions) {
     if (opts.redis && opts.redisUrl)
@@ -50,6 +52,7 @@ export class ClientRedisTransport implements Transport {
     this.keyPrefix = opts.keyPrefix;
     this.instanceId = opts.instanceId ?? randomUUID();
     this.replyStream = replyStream(opts.keyPrefix, this.instanceId);
+    this.logger = opts.logger ?? consoleLogger;
   }
 
   async registerService(_name: string, _dispatch: Dispatcher): Promise<void> {
@@ -151,7 +154,10 @@ export class ClientRedisTransport implements Transport {
             const json = fields[idx + 1] ?? '';
             let parsed: Record<string, unknown>;
             try { parsed = JSON.parse(json) as Record<string, unknown>; }
-            catch { continue; }
+            catch (e) {
+              this.logger.warn('redis reply parse failed', e, { entryId });
+              continue;
+            }
             const replyId = String(parsed.id);
             const pending = this.pending.get(replyId);
             if (!pending) continue;  // late or stranger reply
@@ -162,6 +168,7 @@ export class ClientRedisTransport implements Transport {
         }
       } catch (err) {
         if (this.replyLoopAbort) return;
+        this.logger.error('redis reply loop error', err);
         await new Promise(r => setTimeout(r, 100));
       }
     }

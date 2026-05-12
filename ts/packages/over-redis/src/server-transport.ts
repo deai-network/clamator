@@ -1,8 +1,8 @@
 import { randomUUID } from 'node:crypto';
 import IORedis, { type Redis } from 'ioredis';
 import {
-  parseEnvelope, EnvelopeKind, ClamatorTransportError,
-  type Transport, type Dispatcher, type SendOptions,
+  parseEnvelope, EnvelopeKind, ClamatorTransportError, consoleLogger,
+  type Transport, type Dispatcher, type SendOptions, type Logger,
 } from '@clamator/protocol';
 import { commandStream, consumerGroupName, consumerName } from './keys.js';
 
@@ -16,6 +16,7 @@ export interface ServerTransportOptions {
   consumerClaimIdleMs?: number;
   replyStreamMaxLen?: number;
   shutdownGraceMs?: number;
+  logger?: Logger;
 }
 
 export class ServerRedisTransport implements Transport {
@@ -36,6 +37,7 @@ export class ServerRedisTransport implements Transport {
   private readonly replyStreamMaxLen: number;
   private readonly consumerClaimIdleMs: number;
   private readonly shutdownGraceMs: number;
+  private readonly logger: Logger;
 
   constructor(opts: ServerTransportOptions) {
     if (opts.redis && opts.redisUrl)
@@ -53,6 +55,7 @@ export class ServerRedisTransport implements Transport {
     this.replyStreamMaxLen = opts.replyStreamMaxLen ?? 1024;
     this.consumerClaimIdleMs = opts.consumerClaimIdleMs ?? 60_000;
     this.shutdownGraceMs = opts.shutdownGraceMs ?? 5_000;
+    this.logger = opts.logger ?? consoleLogger;
   }
 
   async registerService(name: string, dispatch: Dispatcher): Promise<void> {
@@ -134,6 +137,11 @@ export class ServerRedisTransport implements Transport {
         }
       } catch (err) {
         if (this.abort) return;
+        this.logger.error(
+          `redis consumer loop error: service=${service}`,
+          err,
+          { service },
+        );
         await new Promise(r => setTimeout(r, 100));
       }
     }
@@ -166,6 +174,11 @@ export class ServerRedisTransport implements Transport {
         }
       } catch (err) {
         if (this.abort) return;
+        this.logger.error(
+          `redis reclaim loop error: service=${service}`,
+          err,
+          { service },
+        );
       }
     }
   }
@@ -183,9 +196,26 @@ export class ServerRedisTransport implements Transport {
     const replyTo = replyToIdx >= 0 ? fields[replyToIdx + 1] : null;
     let envObj: Record<string, unknown>;
     try { envObj = JSON.parse(fields[envIdx + 1] ?? '') as Record<string, unknown>; }
-    catch { await this.redis.xack(stream, group, entryId); return; }
+    catch (err) {
+      this.logger.warn(
+        `redis poison envelope: service=${service} entry=${entryId}`,
+        err,
+        { service, entryId },
+      );
+      await this.redis.xack(stream, group, entryId);
+      return;
+    }
     let parsed;
-    try { parsed = parseEnvelope(envObj); } catch { await this.redis.xack(stream, group, entryId); return; }
+    try { parsed = parseEnvelope(envObj); }
+    catch (err) {
+      this.logger.warn(
+        `redis poison envelope: service=${service} entry=${entryId}`,
+        err,
+        { service, entryId },
+      );
+      await this.redis.xack(stream, group, entryId);
+      return;
+    }
 
     const dispatcher = this.dispatchers.get(service);
     if (!dispatcher) { await this.redis.xack(stream, group, entryId); return; }

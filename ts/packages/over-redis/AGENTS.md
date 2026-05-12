@@ -21,6 +21,7 @@ Sibling package: `clamator-over-redis` (Py). Changes here usually require siblin
 | `consumerClaimIdleMs` | 60_000 | XCLAIM idle threshold (server) |
 | `defaultTimeoutMs` | 30_000 | per-call timeout (client) |
 | `shutdownGraceMs` | 5_000 | drain window on `stop()` |
+| `logger` | `consoleLogger` | `Logger` instance for server-side fault paths |
 
 ## Stream / key naming (must not change without bumping version)
 
@@ -35,6 +36,18 @@ Sibling package: `clamator-over-redis` (Py). Changes here usually require siblin
 - `XAUTOCLAIM` reclaims messages whose consumer has been idle > `consumerClaimIdleMs`.
 - Combined with the protocol-level idempotency contract, retried messages are safe.
 - Document idempotency in handler-author guidance, not enforced by the adapter.
+
+## Logging
+
+`ServerRedisTransport` and `ClientRedisTransport` accept an optional `logger: Logger` (re-exported from `@clamator/protocol`); default `consoleLogger`. `RedisRpcServer` propagates its `opts.logger` into both the transport and the underlying `RpcServerCore`. Records emitted:
+
+- Server consumer loop catches `xreadgroup` error → `error` with the thrown value. Retry continues after 100 ms.
+- Server reclaim loop catches `xautoclaim` error → `error`.
+- Server `handleEntry` poison envelope (`JSON.parse` or `parseEnvelope` throws) → `warn`. Entry is acked.
+- Client reply json parse fail → `warn`. Reply skipped.
+- Client reply loop catches `xread` error → `error`. Retry continues after 100 ms.
+
+Wire format unchanged. Best-effort `quit`/`disconnect`/`del` and the `BUSYGROUP` filter on `xgroup CREATE` remain silent — expected, not faults.
 
 ## Out of scope (v0.1)
 
