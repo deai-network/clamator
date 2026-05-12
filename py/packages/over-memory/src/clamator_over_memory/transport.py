@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 from typing import Any
 
 from clamator_protocol import (
@@ -13,6 +14,8 @@ from clamator_protocol import (
 )
 
 from .bus import MemoryBus
+
+logger = logging.getLogger(__name__)
 
 
 class MemoryTransport:
@@ -53,6 +56,12 @@ class MemoryTransport:
                 else:
                     fut.set_result(reply)
             except Exception as e:  # noqa: BLE001
+                logger.warning(
+                    "dispatcher threw: service=%s",
+                    parsed.service,
+                    exc_info=True,
+                    extra={"clamator": {"service": parsed.service, "rpc_id": str(parsed.id)}},
+                )
                 if str(parsed.id) in self._pending:
                     self._pending.pop(str(parsed.id))
                     if not fut.done():

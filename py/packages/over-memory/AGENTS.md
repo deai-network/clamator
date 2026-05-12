@@ -19,3 +19,7 @@ Changes here usually require a sibling change in `@clamator/over-memory` (TS).
 - `stop()` rejects all outstanding pending calls with `ClamatorTransportError("transport stopped")`.
 - `start()` after `stop()` raises.
 - No persistence.
+
+## Logging
+
+`MemoryTransport` uses `logging.getLogger("clamator_over_memory.transport")`. The dispatcher-wrapper site emits a `WARNING` record with `exc_info` when a dispatcher raises (the wire-side caller already sees the wrapped `ClamatorTransportError("dispatcher threw", cause=e)`; the log surfaces the original traceback to the operator).
