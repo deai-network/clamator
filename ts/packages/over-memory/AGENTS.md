@@ -20,6 +20,10 @@ Changes here usually require a sibling change in `clamator-over-memory` (Py).
 - `start()` after `stop()` throws.
 - No persistence, no cross-bus federation.
 
+## Logging
+
+`MemoryTransport`, `MemoryRpcServer`, and `MemoryRpcClient` accept an optional `logger: Logger` constructor option (re-exported from `@clamator/protocol`); default `consoleLogger`. The `MemoryRpcServer` wires the same logger into both its `MemoryTransport` and the underlying `RpcServerCore`. The dispatcher-wrapper site emits a `warn` record carrying the original exception when an in-process dispatcher throws; the awaited `send` still rejects with `ClamatorTransportError('dispatcher threw', cause)`.
+
 ## What lives here vs `tests/interop/`
 
 - Lives here: protocol-level invariants, validation, error mapping, notifications, timeout behavior — fast, no docker.

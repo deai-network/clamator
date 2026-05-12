@@ -1,6 +1,6 @@
 import {
-  parseEnvelope, EnvelopeKind, ClamatorTransportError,
-  type Transport, type Dispatcher, type SendOptions,
+  parseEnvelope, EnvelopeKind, ClamatorTransportError, consoleLogger,
+  type Transport, type Dispatcher, type SendOptions, type Logger,
 } from '@clamator/protocol';
 import type { MemoryBus } from './bus.js';
 
@@ -15,7 +15,11 @@ export class MemoryTransport implements Transport {
   private pending = new Map<string, Pending>();
   private myServices = new Set<string>();
 
-  constructor(private readonly bus: MemoryBus, private readonly _instanceId: string = 'mem') {}
+  constructor(
+    private readonly bus: MemoryBus,
+    private readonly _instanceId: string = 'mem',
+    private readonly logger: Logger = consoleLogger,
+  ) {}
 
   async registerService(name: string, dispatch: Dispatcher): Promise<void> {
     this.bus.register(name, dispatch);
@@ -56,6 +60,11 @@ export class MemoryTransport implements Transport {
             p.resolve(reply);
           }
         } catch (e) {
+          this.logger.warn(
+            `dispatcher threw: service=${parsed.service}`,
+            e,
+            { service: parsed.service, rpcId: String(parsed.id) },
+          );
           const p = this.pending.get(String(parsed.id));
           if (!p) return;
           this.pending.delete(String(parsed.id));
