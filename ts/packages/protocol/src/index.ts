@@ -14,3 +14,4 @@ export {
 export type { Transport, Dispatcher, SendOptions } from './transport.js';
 export { RpcServerCore, type ServerStopOptions } from './server-core.js';
 export { RpcClientCore, type ClamatorClient, type RpcClientCoreOptions } from './client-core.js';
+export { type Logger, consoleLogger } from './logger.js';

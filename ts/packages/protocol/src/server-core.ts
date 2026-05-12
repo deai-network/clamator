@@ -2,6 +2,7 @@ import type { Contract, AnyMethodDef, HandlersFor } from './contract.js';
 import type { Transport, Dispatcher } from './transport.js';
 import { EnvelopeKind, type Envelope, buildSuccessResponse, buildErrorResponse } from './envelope.js';
 import { RpcError, exceptionToErrorData } from './error.js';
+import { type Logger, consoleLogger } from './logger.js';
 
 interface ServiceEntry {
   contract: Contract<string, Record<string, AnyMethodDef>>;
@@ -17,7 +18,10 @@ export class RpcServerCore {
   private state: 'idle' | 'started' | 'stopped' = 'idle';
   private inflight = new Set<Promise<unknown>>();
 
-  constructor(private readonly transport: Transport) {}
+  constructor(
+    private readonly transport: Transport,
+    private readonly logger: Logger = consoleLogger,
+  ) {}
 
   registerService<M extends Record<string, AnyMethodDef>>(
     contract: Contract<string, M>,
@@ -49,6 +53,11 @@ export class RpcServerCore {
       try {
         parsed = methodDef.params.parse(env.params);
       } catch (e) {
+        this.logger.warn(
+          `RPC params validation failed: ${serviceName}.${env.method} id=${String(id)}`,
+          e,
+          { service: serviceName, method: env.method, rpcId: id },
+        );
         if (env.kind === EnvelopeKind.Notification) return null;
         return buildErrorResponse(id, -32602, 'Invalid params', exceptionToErrorData(e));
       }
@@ -62,8 +71,22 @@ export class RpcServerCore {
         result = await work;
       } catch (e) {
         this.inflight.delete(work);
-        if (env.kind === EnvelopeKind.Notification) return null;
+        if (env.kind === EnvelopeKind.Notification) {
+          if (!(e instanceof RpcError)) {
+            this.logger.error(
+              `RPC handler raised: ${serviceName}.${env.method} id=${String(id)}`,
+              e,
+              { service: serviceName, method: env.method, rpcId: id },
+            );
+          }
+          return null;
+        }
         if (e instanceof RpcError) return buildErrorResponse(id, e.code, e.message, e.data);
+        this.logger.error(
+          `RPC handler raised: ${serviceName}.${env.method} id=${String(id)}`,
+          e,
+          { service: serviceName, method: env.method, rpcId: id },
+        );
         return buildErrorResponse(id, -32603, 'Internal error', exceptionToErrorData(e));
       }
       this.inflight.delete(work);
@@ -74,6 +97,11 @@ export class RpcServerCore {
         const validated = (methodDef as { result: { parse: (x: unknown) => unknown } }).result.parse(result);
         return buildSuccessResponse(id as string | number, validated);
       } catch (e) {
+        this.logger.error(
+          `RPC result validation failed: ${serviceName}.${env.method} id=${String(id)}`,
+          e,
+          { service: serviceName, method: env.method, rpcId: id },
+        );
         return buildErrorResponse(id, -32603, 'Result validation failed', exceptionToErrorData(e));
       }
     };

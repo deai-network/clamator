@@ -12,6 +12,7 @@ These exports are the SemVer surface; changes require updating the matching Py p
 - `RpcError`, `ClamatorProtocolError`, `ClamatorTransportError`, `exceptionToErrorData`
 - `Transport`, `Dispatcher`
 - `RpcServerCore`, `RpcClientCore`, `ClamatorClient`
+- `Logger`, `consoleLogger`
 
 ## Reserved error codes
 
@@ -39,3 +40,22 @@ Adding/changing a reserved code: update both languages + interop scenario in the
 - All async APIs are `Promise<T>`.
 - `RpcServerCore.registerService` is dedup'd per service name.
 - `start()` / `stop()` are idempotent; calling `start()` after `stop()` throws.
+
+## Logging
+
+`RpcServerCore`'s constructor accepts an optional second arg `logger: Logger`; defaults to `consoleLogger` (`error`/`warn` map to `console.error`/`console.warn` with a `[clamator]` prefix). The `Logger` interface:
+
+```ts
+interface Logger {
+  error(msg: string, err?: unknown, fields?: Record<string, unknown>): void;
+  warn(msg: string, err?: unknown, fields?: Record<string, unknown>): void;
+}
+```
+
+Three dispatcher fault paths emit records (wire format unchanged):
+
+- Handler exception (`-32603 Internal error`) → `error` with the thrown value attached.
+- Result-schema validation failure (`-32603 Result validation failed`) → `error`.
+- Params-schema validation failure (`-32602 Invalid params`) → `warn`.
+
+`RpcError` raised by a handler is the typed-failure path and is intentionally **not** logged. Each record carries fields `{service, method, rpcId}`.
