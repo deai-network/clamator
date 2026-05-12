@@ -30,3 +30,13 @@ Same as `@clamator/protocol`. Adding/changing a reserved code: update both langu
 - Pydantic v2 with `model_config = {populate_by_name: True}` on every generated model (codegen sets this; protocol package does not enforce on bare BaseModel).
 - `RpcServerCore.register_service` is dedup'd per service name.
 - `start()` / `stop()` are idempotent; calling `start()` after `stop()` raises.
+
+## Logging
+
+`RpcServerCore`'s dispatcher uses `logging.getLogger("clamator_protocol.server_core")`. Three fault paths emit records (wire format unchanged):
+
+- Handler exception (`-32603 Internal error`) → `ERROR` with `exc_info`.
+- Result-model validation failure (`-32603 Result validation failed`) → `ERROR` with the `errors` payload.
+- Params-model validation failure (`-32602 Invalid params`) → `WARNING` with the `errors` payload.
+
+`RpcError` raised by a handler is the typed-failure path and is intentionally **not** logged. Each record carries a `clamator` key in `extra` (`{service, method, rpc_id, errors?}`) — the namespace avoids collision with `LogRecord` builtins. Library does not call `logging.basicConfig`; the application configures handlers and levels.

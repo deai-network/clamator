@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 import time
 from dataclasses import dataclass
 from typing import Any
@@ -17,6 +18,8 @@ from .envelope import (
 )
 from .error import RpcError, exception_to_error_data
 from .transport import Dispatcher, Transport
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -58,6 +61,11 @@ class RpcServerCore:
             try:
                 params = method_entry.params_model.model_validate(env.params)
             except ValidationError as e:
+                logger.warning(
+                    "RPC params validation failed: %s.%s id=%s",
+                    service_name, env.method, rpc_id,
+                    extra={"clamator": {"service": service_name, "method": env.method, "rpc_id": rpc_id, "errors": e.errors()}},
+                )
                 if is_notification:
                     return None
                 return build_error_response(
@@ -78,6 +86,11 @@ class RpcServerCore:
                     return None
                 return build_error_response(rpc_id, e.code, e.message, e.data)
             except Exception as e:  # noqa: BLE001
+                logger.exception(
+                    "RPC handler raised: %s.%s id=%s",
+                    service_name, env.method, rpc_id,
+                    extra={"clamator": {"service": service_name, "method": env.method, "rpc_id": rpc_id}},
+                )
                 if is_notification:
                     return None
                 return build_error_response(
@@ -91,6 +104,11 @@ class RpcServerCore:
             try:
                 validated = method_entry.result_model.model_validate(result)
             except ValidationError as e:
+                logger.error(
+                    "RPC result validation failed: %s.%s id=%s errors=%s",
+                    service_name, env.method, rpc_id, e.errors(),
+                    extra={"clamator": {"service": service_name, "method": env.method, "rpc_id": rpc_id, "errors": e.errors()}},
+                )
                 return build_error_response(
                     rpc_id, -32603, "Result validation failed", {"errors": e.errors()}
                 )
