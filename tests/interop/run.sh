@@ -11,7 +11,8 @@ cd "$ROOT"
 echo "[run.sh] Installing pnpm dependencies..."
 pnpm -C ts install --frozen-lockfile 2>/dev/null || pnpm -C ts install
 
-# Run the runner via pnpm exec tsx (uses the lib package's local tsx)
+# Run the runner via pnpm exec tsx (uses the lib package's local tsx).
+# Use `-C ts` so pnpm resolves against the workspace manifest; repo root has none.
 echo "[run.sh] Starting interop runner..."
-pnpm --filter @clamator/interop-runner exec tsx \
+pnpm -C ts --filter @clamator/interop-runner exec tsx \
   "$ROOT/tests/interop/lib/runner.ts"
