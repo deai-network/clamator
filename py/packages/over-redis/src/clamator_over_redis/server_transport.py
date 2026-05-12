@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import os
 import uuid
 from typing import Any
@@ -14,6 +15,8 @@ from clamator_protocol import (
 from redis.asyncio import Redis
 
 from .keys import command_stream, consumer_group_name, consumer_name
+
+logger = logging.getLogger(__name__)
 
 
 class ServerRedisTransport:
@@ -107,6 +110,11 @@ class ServerRedisTransport:
             except asyncio.CancelledError:
                 return
             except Exception:
+                logger.exception(
+                    "redis consumer loop error: service=%s",
+                    service,
+                    extra={"clamator": {"service": service}},
+                )
                 await asyncio.sleep(0.1)
 
     async def _reclaim_loop(self, service: str) -> None:
@@ -126,7 +134,11 @@ class ServerRedisTransport:
             except asyncio.CancelledError:
                 return
             except Exception:
-                pass
+                logger.exception(
+                    "redis reclaim loop error: service=%s",
+                    service,
+                    extra={"clamator": {"service": service}},
+                )
 
     async def _handle_entry(
         self, service: str, stream: str, group: str, entry_id: Any, fields: dict[Any, Any],
@@ -144,6 +156,12 @@ class ServerRedisTransport:
             env_obj = json.loads(env_b)
             parsed = parse_envelope(env_obj)
         except Exception:
+            logger.warning(
+                "redis poison envelope: service=%s entry=%s",
+                service, entry_id,
+                exc_info=True,
+                extra={"clamator": {"service": service, "entry_id": str(entry_id)}},
+            )
             await self._redis.xack(stream, group, entry_id)
             return
         dispatcher = self._dispatchers.get(service)

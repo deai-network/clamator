@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import os
 import uuid
 from typing import Any
@@ -16,6 +17,8 @@ from clamator_protocol import (
 from redis.asyncio import Redis
 
 from .keys import command_stream, reply_stream
+
+logger = logging.getLogger(__name__)
 
 
 class ClientRedisTransport:
@@ -130,6 +133,10 @@ class ClientRedisTransport:
                         try:
                             parsed = json.loads(env_field)
                         except Exception:
+                            logger.warning(
+                                "redis reply parse failed",
+                                exc_info=True,
+                            )
                             continue
                         rid = str(parsed.get("id"))
                         fut = self._pending.pop(rid, None)
@@ -138,4 +145,5 @@ class ClientRedisTransport:
             except asyncio.CancelledError:
                 return
             except Exception:
+                logger.exception("redis reply loop error")
                 await asyncio.sleep(0.1)
