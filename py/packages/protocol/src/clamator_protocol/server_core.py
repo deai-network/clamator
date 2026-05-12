@@ -64,7 +64,10 @@ class RpcServerCore:
                 logger.warning(
                     "RPC params validation failed: %s.%s id=%s",
                     service_name, env.method, rpc_id,
-                    extra={"clamator": {"service": service_name, "method": env.method, "rpc_id": rpc_id, "errors": e.errors()}},
+                    extra={"clamator": {
+                        "service": service_name, "method": env.method,
+                        "rpc_id": rpc_id, "errors": e.errors(),
+                    }},
                 )
                 if is_notification:
                     return None
@@ -89,7 +92,9 @@ class RpcServerCore:
                 logger.exception(
                     "RPC handler raised: %s.%s id=%s",
                     service_name, env.method, rpc_id,
-                    extra={"clamator": {"service": service_name, "method": env.method, "rpc_id": rpc_id}},
+                    extra={"clamator": {
+                        "service": service_name, "method": env.method, "rpc_id": rpc_id,
+                    }},
                 )
                 if is_notification:
                     return None
@@ -107,7 +112,10 @@ class RpcServerCore:
                 logger.error(
                     "RPC result validation failed: %s.%s id=%s errors=%s",
                     service_name, env.method, rpc_id, e.errors(),
-                    extra={"clamator": {"service": service_name, "method": env.method, "rpc_id": rpc_id, "errors": e.errors()}},
+                    extra={"clamator": {
+                        "service": service_name, "method": env.method,
+                        "rpc_id": rpc_id, "errors": e.errors(),
+                    }},
                 )
                 return build_error_response(
                     rpc_id, -32603, "Result validation failed", {"errors": e.errors()}
